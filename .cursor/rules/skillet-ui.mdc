@@ -10,7 +10,7 @@ alwaysApply: false
 
 - Frame layout and widget names: `UI/*.xml` (e.g. `SkilletFrame`, `SkilletReagent1`)
 - Behavior and updates: matching `UI/*.lua`
-- New visible widgets: add to XML first, wire handlers in Lua. Register new UI files in `Skillet.toc` after `Utils.lua`
+- New visible widgets: add to XML first, wire handlers in Lua. Register new UI files in `Skillet-Enhanced.toc` after `Utils.lua`
 
 ## Window Update Chain
 
@@ -50,7 +50,7 @@ Existing code uses `getglobal("SkilletReagent"..i)` — match this style in touc
 ## Tooltips
 
 - Recipe detail: `SkilletTradeskillTooltip` via `DisplayTradeskillTooltip`
-- Hover tooltips: `SetTradeSkillToolTip(skill, reagentIndex)` — validate skill index and reagent slot before calling `GameTooltip:SetTradeSkillItem` (see `exampleError.txt`)
+- Hover tooltips: `SetTradeSkillToolTip(skill, reagentIndex)` — validate skill index and reagent slot before calling `GameTooltip:SetTradeSkillItem` (see `.docs/OVERVIEW.md` Known Issues)
 - Prefer Stitch reagent links as fallback when Blizzard index is stale
 
 ## User-Facing Strings

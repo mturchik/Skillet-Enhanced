@@ -9,7 +9,7 @@ Read `.docs/OVERVIEW.md` before structural or behavioral changes.
 
 ## Target Platform
 
-- WotLK **3.3.5a** only (`Interface: 30300` in `Skillet.toc`)
+- WotLK **3.3.5a** only (`Interface: 30300` in `Skillet-Enhanced.toc`)
 - Use legacy tradeskill APIs: `GetTradeSkill*`, `DoTradeSkill`, `SetTradeSkillItem`, `GetMerchantItem*`
 - Never introduce Retail APIs (`C_TradeSkillUI`, etc.)
 
@@ -26,7 +26,7 @@ Read `.docs/OVERVIEW.md` before structural or behavioral changes.
 - Do **not** edit vendored code under `Libs/` unless explicitly requested
 - Do **not** refactor Ace2 patterns to modern Ace3/LibStub-only architecture
 - Do **not** call `:SetScale()` on frames (removed in v1.5; crashes Mac client)
-- Update `Skillet.toc` load order only when adding/removing addon-authored files
+- Update `Skillet-Enhanced.toc` load order only when adding/removing addon-authored files
 
 ## Module Ownership
 

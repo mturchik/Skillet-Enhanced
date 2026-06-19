@@ -39,4 +39,4 @@ UI, events, queue execution, tooltips, and vendor/bank flows are **not** covered
 
 ## Do not ship test artifacts
 
-Never add `tests/`, `luaunit.lua`, or test-only files to [`Skillet.toc`](Skillet.toc).
+Never add `tests/`, `luaunit.lua`, or test-only files to [`Skillet-Enhanced.toc`](Skillet-Enhanced.toc).

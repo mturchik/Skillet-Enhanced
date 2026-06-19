@@ -1,6 +1,6 @@
-# Skillet — Repository Overview
+# Skillet-Enhanced — Repository Overview
 
-A comprehensive reference for the **Skillet** World of Warcraft addon as present in this repository. Skillet replaces Blizzard's default tradeskill/craft window with a larger, feature-rich alternative. This copy targets **Wrath of the Lich King 3.3.5a** (`Interface: 30300`).
+A comprehensive reference for the **Skillet-Enhanced** World of Warcraft addon as present in this repository. Skillet-Enhanced is a community fork of **Skillet** by Robert Clark (nogudnik). It replaces Blizzard's default tradeskill/craft window with a larger, feature-rich alternative. This copy targets **Wrath of the Lich King 3.3.5a** (`Interface: 30300`).
 
 ---
 
@@ -8,15 +8,15 @@ A comprehensive reference for the **Skillet** World of Warcraft addon as present
 
 | Property | Value |
 |---|---|
-| **Name** | Skillet |
-| **Version** | 1.13 (Curse packaged revision r167, July 2010) |
-| **Author** | Robert Clark (nogudnik@gmail.com) |
+| **Name** | Skillet-Enhanced |
+| **Version** | 1.14 (fork; upstream Skillet 1.13 / r167) |
+| **Author** | Mark (fork); original Skillet by Robert Clark (nogudnik@gmail.com) |
 | **License** | GPL v3 or later |
 | **Framework** | Ace2 (AceAddon, AceEvent, AceDB, AceConsole, AceHook, AceLocale) |
 | **Saved Variables** | `SkilletDB` (global), `SkilletDBPC` (per-character) |
 | **Primary Purpose** | Enhanced tradeskill UI with queuing, shopping lists, alt inventory, and recipe notes |
 
-Skillet is **not** a continuation of ATSW (Advanced Trade Skill Window) by Slarti, but a separate addon inspired by ATSW's ideas. It embeds a fork of **Stitch-1.1** (by Nymbia), renamed **SkilletStitch-1.1**, for recipe caching and craft queuing.
+Skillet-Enhanced is a fork of Skillet, which is **not** a continuation of ATSW (Advanced Trade Skill Window) by Slarti, but a separate addon inspired by ATSW's ideas. It embeds a fork of **Stitch-1.1** (by Nymbia), renamed **SkilletStitch-1.1**, for recipe caching and craft queuing. The addon folder and `.toc` file are named `Skillet-Enhanced`; internal globals, SavedVariables (`SkilletDB`), and slash commands remain `Skillet` for compatibility with upstream data and third-party hooks.
 
 ---
 
@@ -86,7 +86,7 @@ flowchart TB
 
 ### Load Order
 
-Defined in `Skillet.toc`:
+Defined in `Skillet-Enhanced.toc`:
 
 1. **Embedded libraries** via `embeds.xml` (LibStub, Ace2 stack, Waterfall, Abacus, LibPeriodicTable)
 2. **Locale files** (8 languages)
@@ -98,8 +98,10 @@ Defined in `Skillet.toc`:
 ## Directory Structure
 
 ```
-Skillet/
-├── Skillet.toc              # Addon manifest (Interface 30300)
+Skillet-Enhanced/
+├── Skillet-Enhanced.toc     # Addon manifest (Interface 30300)
+├── README.md                # Installation, features, credits
+├── CHANGELOG.md             # Release and upstream history
 ├── Skillet.lua              # Main addon: lifecycle, events, options, DB defaults
 ├── SkilletStitch-1.1.lua    # Forked Stitch library: scan, cache, queue, craft
 ├── SkilletQueue.lua         # Queue add/save/load/process logic
@@ -108,9 +110,6 @@ Skillet/
 ├── Upgrades.lua             # SavedVariables migration between versions
 ├── LibPossessions.lua       # Abstraction over alt-inventory addons
 ├── embeds.xml               # Embedded Ace2 / support libraries
-├── description.txt          # Original Curse/WoWAce feature description
-├── Changelog-Skillet-r167.txt
-├── exampleError.txt           # Sample runtime error (tooltip bug)
 ├── LICENSE.txt
 │
 ├── Locale/                    # AceLocale-2.2 translations
@@ -426,7 +425,7 @@ For private 3.3.5a servers (such as this Ebon Hold installation), Skillet should
 
 ## Known Issues
 
-### Tooltip Error (`exampleError.txt`)
+### Reagent Tooltip Error (SetTradeSkillItem)
 
 ```
 MainFrame.lua:862: Invalid trade skill item in SetTradeSkillItem(index [,reagent])
@@ -472,7 +471,7 @@ The error fires from `ReagentButtonOnEnter` → `SetTradeSkillToolTip(skill, ind
 
 ## Supported Third-Party Addons (historical)
 
-Documented in `description.txt` as tested:
+Historically tested with upstream Skillet:
 
 - Fizzwidget Reagent Cost
 - SomeAssemblyRequired
@@ -489,9 +488,9 @@ LibPossessions additionally supports: Sanity2, CharacterInfoStorage, Possessions
 
 ## Repository State
 
-- Local git repository with a single `init` commit (`c1ea358`)
-- No remote configured
-- Contains upstream Skillet r167 codebase plus `exampleError.txt` (local debugging artifact)
+- Git repository on `main`; fork of upstream Skillet r167 with ongoing Skillet-Enhanced maintenance
+- Publish as the `Skillet-Enhanced` folder with matching `Skillet-Enhanced.toc` (not `Skillet.toc`)
+- User-facing docs: `README.md`, `CHANGELOG.md`; internal docs under `.docs/`
 
 ---
 
@@ -509,8 +508,8 @@ LibPossessions additionally supports: Sanity2, CharacterInfoStorage, Possessions
 
 ## Further Reading
 
-- Original feature list: `description.txt`
-- Recent upstream changes: `Changelog-Skillet-r167.txt`
+- User guide and feature list: `README.md`
+- Release history: `CHANGELOG.md`
 - Public mod API documentation: header comments in `ThirdPartyHooks.lua`
 - Recipe data API formats: `ThirdPartyHooks.lua` (TradeSkill Query API section)
 - License: `LICENSE.txt` (GPL v3+)

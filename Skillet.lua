@@ -18,12 +18,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ]]--
 
-local MAJOR_VERSION = "1.13"
+local MAJOR_VERSION = "1.14"
 local MINOR_VERSION = ("$Revision: 153 $"):match("%d+") or 1
 local DATE = string.gsub("$Date: 2008-10-26 19:38:21 +0000 (Sun, 26 Oct 2008) $", "^.-(%d%d%d%d%-%d%d%-%d%d).-$", "%1")
 
 Skillet = AceLibrary("AceAddon-2.0"):new("AceConsole-2.0", "AceEvent-2.0", "AceDB-2.0", "AceHook-2.1")
-Skillet.title   = "Skillet"
+Skillet.title   = "Skillet-Enhanced"
 Skillet.version = MAJOR_VERSION .. "-" .. MINOR_VERSION
 Skillet.date    = DATE
 
@@ -562,6 +562,9 @@ function Skillet:ScanCompleted()
     if trade and trade ~= "UNKNOWN" then
         self:RemapQueueAfterRescan(trade)
         restore_selected_recipe(self)
+        if self.selectedSkill and not self.stitch:GetItemDataByIndex(trade, self.selectedSkill) then
+            self.selectedSkill = nil
+        end
     end
 
     if self.tradeSkillFrame and self.tradeSkillFrame:IsVisible() then

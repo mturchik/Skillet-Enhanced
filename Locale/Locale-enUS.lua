@@ -21,7 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 local L = AceLibrary("AceLocale-2.2"):new("Skillet")
 
 L:RegisterTranslations("enUS", function() return {
-	["Skillet Trade Skills"] 		= true, -- default message
+	["Skillet Trade Skills"] 		= "Skillet-Enhanced Trade Skills", -- default message
     ["Sorting"] 				 	= true,
     ["Create"] 				 		= true,
     ["Queue All"]					= true,

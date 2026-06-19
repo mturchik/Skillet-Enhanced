@@ -990,6 +990,12 @@ function Skillet:UpdateDetailsWindow(skill_index)
 
     local s = self.stitch:GetItemDataByIndex(self.currentTrade, skill_index)
 
+    if not s then
+        -- Index stale after rescan, header slot, or recipe not yet cached
+        self:SetSelectedSkill(nil, false)
+        return
+    end
+
     -- Name of the skill
     SkilletSkillName:SetText(s.name);
     SkilletRecipeNotesButton:Show();

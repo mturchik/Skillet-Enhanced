@@ -1,10 +1,10 @@
-# Skillet Manual Smoke Test Checklist
+# Skillet-Enhanced Manual Smoke Test Checklist
 
 Run this checklist after any change to UI, events, queue processing, or tradeskill data handling. Estimated time: ~10 minutes.
 
 ## Prerequisites
 
-- Skillet enabled on a WotLK 3.3.5a character with at least two professions (one crafting, one gathering or enchanting preferred)
+- Skillet-Enhanced enabled on a WotLK 3.3.5a character with at least two professions (one crafting, one gathering or enchanting preferred)
 - Some materials in bags and bank for queue/craft tests
 - Access to a vendor that sells a reagent used by a known recipe (optional, for merchant test)
 
@@ -15,7 +15,7 @@ Run this checklist after any change to UI, events, queue processing, or tradeski
 - [x] **3. Reagent filter** — Filter by a reagent name (not the recipe name); confirm matching recipes appear
 - [x] **4. Sorting** — Sort by name, difficulty, item level, and quality; toggle reverse sort; confirm order changes
 - [x] **5. Recipe tooltip** — Hover a recipe in the list; tooltip shows without Lua errors
-- [x] **6. Reagent tooltip** — Hover each reagent slot for a selected recipe; no `SetTradeSkillItem` errors (see `exampleError.txt`)
+- [x] **6. Reagent tooltip** — Hover each reagent slot for a selected recipe; no `SetTradeSkillItem` errors
 - [x] **7. Reverse navigation** — Click a craftable reagent; Skillet navigates to that reagent's recipe
 - [x] **8. Queue items** — Queue two different recipes; confirm both appear in the queue panel
 - [x] **9. Process queue** — Click Start; first queued item begins crafting
@@ -56,6 +56,6 @@ When filing a bug, include:
 
 - Steps to reproduce
 - Profession and recipe involved
-- Any Lua error text from `exampleError.txt` format (file, line, stack)
+- Any Lua error text (file, line, stack from BugSack/BugGrabber or `/script` output)
 - Whether sorting or filtering was active when the error occurred
 

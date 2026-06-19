@@ -55,7 +55,7 @@ Before starting, confirm:
    - What the addon replaces or hooks
    - Guard conditions (when it activates / stays hidden)
    - Event → handler → UI refresh flow
-   - Known bugs (e.g. error logs, `exampleError.txt`)
+   - Known bugs (e.g. error logs, BugSack/BugGrabber dumps)
 
 4. **Write `.docs/OVERVIEW.md`**
 

@@ -35,7 +35,7 @@ isProject: false
 
 Roughly **80% of the codebase** (UI, event wiring, queue processing, merchant/bank integration) cannot be exercised meaningfully outside the client without a large mock harness and significant refactoring.
 
-**What *is* feasible locally:** unit tests for **pure or mostly-pure logic** — link parsing, SavedVariables string compression, shopping-list aggregation, recipe sort comparators, and filter matching. These are the areas most likely to regress silently when fixing bugs like the tooltip error in [`exampleError.txt`](exampleError.txt).
+**What *is* feasible locally:** unit tests for **pure or mostly-pure logic** — link parsing, SavedVariables string compression, shopping-list aggregation, recipe sort comparators, and filter matching. These are the areas most likely to regress silently when fixing bugs like the reagent tooltip error documented in `.docs/OVERVIEW.md`.
 
 ```mermaid
 flowchart LR
@@ -65,7 +65,7 @@ flowchart LR
 | Item | Status | Location / notes |
 |------|--------|------------------|
 | Lua 5.1 runtime | Done | **Lua for Windows** installed on dev machine |
-| Test framework | Done | [`luaunit.lua`](luaunit.lua) v3.5 vendored at **project root** (bluebird75/luaunit; not loaded by [`Skillet.toc`](Skillet.toc)) |
+| Test framework | Done | [`luaunit.lua`](luaunit.lua) v3.5 vendored at **project root** (bluebird75/luaunit; not loaded by [`Skillet-Enhanced.toc`](Skillet-Enhanced.toc)) |
 | luarocks / busted | Not needed | luaunit replaces busted as the runner |
 
 **Run tests from the addon root** (where `luaunit.lua` lives):
@@ -112,7 +112,7 @@ os.exit(lu.LuaUnit.run())
 
 Individual test files use luaunit 3.x `TestCase` methods (`assertEquals`, `assertTrue`, …) or standalone `lu.assertEquals(...)` calls.
 
-**Do not** add `luaunit.lua` or `tests/` to [`Skillet.toc`](Skillet.toc) — dev-only, never shipped to the client.
+**Do not** add `luaunit.lua` or `tests/` to [`Skillet-Enhanced.toc`](Skillet-Enhanced.toc) — dev-only, never shipped to the client.
 
 ---
 
@@ -124,7 +124,7 @@ Most valuable pure functions are **`local`** today and unreachable from tests:
 - [`SkilletQueue.lua`](SkilletQueue.lua) lines 240–257: `update_queued_list`
 - [`UI/MainFrame.lua`](UI/MainFrame.lua) lines 313–340: filter text matching inside `is_hidden_skill`
 
-**Recommended minimal refactor:** add [`SkilletUtil.lua`](SkilletUtil.lua) loaded early in `Skillet.toc` (after locales, before Stitch):
+**Recommended minimal refactor:** add [`SkilletUtil.lua`](SkilletUtil.lua) loaded early in `Skillet-Enhanced.toc` (after locales, before Stitch):
 
 ```lua
 SkilletUtil = {}
@@ -179,7 +179,7 @@ Document in [`.docs/MANUAL_TEST_CHECKLIST.md`](.docs/MANUAL_TEST_CHECKLIST.md) �
 1. Open each profession window; confirm Skillet replaces default UI
 2. Filter by recipe name and reagent name
 3. Sort by name, difficulty, level, quality (toggle reverse)
-4. Hover recipe and each reagent tooltip (no Lua errors — covers [`exampleError.txt`](exampleError.txt))
+4. Hover recipe and each reagent tooltip (no Lua errors — covers reagent tooltip edge cases in `.docs/OVERVIEW.md`)
 5. Queue 2+ different recipes; Start queue; Clear queue
 6. Log out/in — queue persists
 7. `/skillet shoppinglist` — materials listed
