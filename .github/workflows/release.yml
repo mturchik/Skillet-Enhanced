@@ -29,7 +29,8 @@ jobs:
       - name: Build release zip
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          STAGING="release/Skillet-Enhanced"
+          STAGING="/tmp/Skillet-Enhanced"
+          rm -rf "$STAGING"
           mkdir -p "$STAGING"
           rsync -a \
             --exclude='tests/' \
@@ -42,7 +43,7 @@ jobs:
             --exclude='.vs/' \
             --exclude='exampleError.txt' \
             ./ "$STAGING/"
-          cd release && zip -r "../Skillet-Enhanced-${VERSION}.zip" Skillet-Enhanced
+          cd /tmp && zip -r "${GITHUB_WORKSPACE}/Skillet-Enhanced-${VERSION}.zip" Skillet-Enhanced
 
       - name: Extract changelog section
         id: notes
