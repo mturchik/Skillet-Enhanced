@@ -14,6 +14,10 @@ function GetTradeSkillInfo(index)
     return "Mock Recipe", "optimal", 1, 1
 end
 
+function GetTradeSkillItemLink(index)
+    return nil
+end
+
 function GetItemCount(link, includeBank)
     return 0
 end

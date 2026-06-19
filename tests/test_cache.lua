@@ -61,6 +61,68 @@ end
 function TestCache:test_computeScanPercent()
     lu.assertEquals(SkilletUtil.ComputeScanPercent(142, 380), 37)
     lu.assertEquals(SkilletUtil.ComputeScanPercent(0, 0), 0)
+    lu.assertEquals(SkilletUtil.ComputeScanPercent(119, 36), 100)
+end
+
+function TestCache:test_countNonHeaderRecipesUpTo()
+    local headers = { true, false, false, true, false }
+    lu.assertEquals(SkilletUtil.CountNonHeaderRecipesUpTo(5, headers, 0), 0)
+    lu.assertEquals(SkilletUtil.CountNonHeaderRecipesUpTo(5, headers, 3), 2)
+    lu.assertEquals(SkilletUtil.CountNonHeaderRecipesUpTo(5, headers, 5), 3)
+end
+
+function TestCache:test_syncScanSessionProgress()
+    local headers = { true, false, false, true, false }
+    local cached = { [2] = "a", [3] = "b" }
+    local session = {
+        blizz_count = 5,
+        is_header = headers,
+        forced = false,
+        next_index = 4,
+    }
+    SkilletUtil.SyncScanSessionProgress(session, cached, nil)
+    lu.assertEquals(session.recipe_total, 3)
+    lu.assertEquals(session.recipe_done, 2)
+
+    session.forced = true
+    session.next_index = 4
+    SkilletUtil.SyncScanSessionProgress(session, cached, nil)
+    lu.assertEquals(session.recipe_done, 2)
+
+    SkilletUtil.SyncScanSessionProgress(session, cached, 1)
+    lu.assertEquals(session.recipe_done, 0)
+end
+
+function TestCache:test_isScanSessionUIActive()
+    lu.assertFalse(SkilletUtil.IsScanSessionUIActive(nil))
+    lu.assertFalse(SkilletUtil.IsScanSessionUIActive({ pending = true, profession = "Engineering" }))
+    lu.assertTrue(SkilletUtil.IsScanSessionUIActive({ pending = false, profession = "Engineering" }))
+    lu.assertTrue(SkilletUtil.IsScanSessionUIActive({
+        pending = false,
+        waiting_retry = true,
+        profession = "Engineering",
+        recipe_done = 30,
+        recipe_total = 380,
+    }))
+end
+
+function TestCache:test_isScanSessionRunnable()
+    lu.assertFalse(SkilletUtil.IsScanSessionRunnable(nil))
+    lu.assertFalse(SkilletUtil.IsScanSessionRunnable({ pending = true, profession = "Engineering" }))
+    lu.assertTrue(SkilletUtil.IsScanSessionRunnable({ pending = false, profession = "Engineering" }))
+    lu.assertFalse(SkilletUtil.IsScanSessionRunnable({
+        pending = false,
+        waiting_retry = true,
+        profession = "Engineering",
+    }))
+end
+
+function TestCache:test_syncScanSessionBlizzCount()
+    local session = { blizz_count = 0, recipe_total = 0 }
+    SkilletUtil.SyncScanSessionBlizzCount(session, 5)
+    lu.assertEquals(session.blizz_count, 5)
+    lu.assertEquals(session.recipe_total, SkilletUtil.CountNonHeaderRecipes(5, session.is_header))
+    lu.assertEquals(#session.is_header, 5)
 end
 
 function TestCache:test_formatScanProgress()

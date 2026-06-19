@@ -605,6 +605,7 @@ local function scan_recipe_index(self, prof, i)
 
     local link = GetTradeSkillItemLink(i)
     if not link then
+        self.data[prof][i] = nil
         return false, true
     end
 
@@ -633,6 +634,7 @@ local function scan_recipe_index(self, prof, i)
         local _, _, rcount, _ = GetTradeSkillReagentInfo(i,j)
         local reagent_link = GetTradeSkillReagentItemLink(i,j)
         if not reagent_link then
+            self.data[prof][i] = nil
             return false, true
         else
             reagent_link = SkilletUtil.SquishLink(reagent_link)
@@ -658,6 +660,7 @@ function SkilletStitch:ScanIndexRange(prof, start_index, end_index)
 
     local shred = false
     local recipes_scanned = 0
+    local shred_index = nil
 
     for i = start_index, end_index do
         local skillname, skilltype = GetTradeSkillInfo(i)
@@ -665,6 +668,7 @@ function SkilletStitch:ScanIndexRange(prof, start_index, end_index)
             local scanned, recipe_shred = scan_recipe_index(self, prof, i)
             if recipe_shred then
                 shred = true
+                shred_index = i
                 break
             elseif scanned then
                 recipes_scanned = recipes_scanned + 1
@@ -674,13 +678,7 @@ function SkilletStitch:ScanIndexRange(prof, start_index, end_index)
         end
     end
 
-    if shred then
-        for k,v in pairs(self.data[prof]) do
-            self.data[prof][k] = nil
-        end
-    end
-
-    return shred, recipes_scanned
+    return shred, recipes_scanned, shred_index
 end
 
 function SkilletStitch:ScanTrade()

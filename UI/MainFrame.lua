@@ -773,8 +773,7 @@ function Skillet:internal_RefreshWindowChrome()
     width = SkilletFrame:GetWidth() - reagent_width - 20
     SkilletSkillListParent:SetWidth(width)
 
-    SkilletHideTrivialRecipes:SetChecked(self:GetTradeSkillOption(self.currentTrade, "hidetrivial"))
-    SkilletHideUncraftableRecipes:SetChecked(self:GetTradeSkillOption(self.currentTrade, "hideuncraftable"))
+    self:SyncTradeSkillFilterWidgets()
 
     local _, rank, maxRank = self:GetTradeSkillLine()
     self:UpdateWindowTitle()
@@ -784,14 +783,21 @@ function Skillet:internal_RefreshWindowChrome()
     SkilletRankFrameSkillRank:SetText(rank .. "/" .. maxRank)
 end
 
+local function skip_list_refresh_during_scan(self)
+    if self:IsScanInProgress(self.currentTrade) then
+        self:UpdateWindowTitle()
+        return true
+    end
+    return false
+end
+
 function Skillet:internal_RefreshRecipeList(syncSelection)
     if not self.currentTrade or self.currentTrade == "UNKNOWN" then
         self:SetSelectedSkill(nil)
         return
     end
 
-    if self:IsScanInProgress(self.currentTrade) then
-        self:UpdateWindowTitle()
+    if skip_list_refresh_during_scan(self) then
         return
     end
 
@@ -838,8 +844,7 @@ function Skillet:internal_UpdateTradeSkillWindow()
         return
     end
 
-    if self:IsScanInProgress(self.currentTrade) then
-        self:UpdateWindowTitle()
+    if skip_list_refresh_during_scan(self) then
         return
     end
 
@@ -1362,14 +1367,13 @@ function Skillet:UpdateWindowTitle()
         return
     end
 
+    local session = self.GetScanSession and self:GetScanSession()
     local trade = self.currentTrade
-    if not trade or trade == "UNKNOWN" then
-        title:SetText(L["Skillet Trade Skills"])
-        return
+    if SkilletUtil.IsScanSessionUIActive(session) and (not trade or trade == "UNKNOWN") then
+        trade = session.profession
     end
 
-    local session = self.GetScanSession and self:GetScanSession()
-    if session and session.profession == trade and not session.pending then
+    if self.IsScanInProgress and self:IsScanInProgress(trade) and session then
         local pct = SkilletUtil.ComputeScanPercent(session.recipe_done, session.recipe_total)
         title:SetText(string.format(
             L["Window title scanning"],
@@ -1378,6 +1382,8 @@ function Skillet:UpdateWindowTitle()
             session.recipe_total,
             pct
         ))
+    elseif not trade or trade == "UNKNOWN" then
+        title:SetText(L["Skillet Trade Skills"])
     else
         title:SetText(string.format(L["Window title"], trade))
     end

@@ -238,12 +238,83 @@ function SkilletUtil.CountCachedRecipes(blizz_count, is_header_at, cached)
     return count
 end
 
+-- Counts non-header recipe rows from Blizzard index 1 through through_index (inclusive).
+function SkilletUtil.CountNonHeaderRecipesUpTo(blizz_count, is_header_at, through_index)
+    if not blizz_count or blizz_count <= 0 or not through_index or through_index <= 0 then
+        return 0
+    end
+
+    local count = 0
+    local limit = through_index
+    if limit > blizz_count then
+        limit = blizz_count
+    end
+    for i = 1, limit, 1 do
+        if not is_header_at[i] then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
 function SkilletUtil.ComputeScanPercent(done, total)
     if not total or total <= 0 then
         return 0
     end
 
-    return math.floor(done / total * 100)
+    local pct = math.floor(done / total * 100)
+    if pct > 100 then
+        return 100
+    end
+    return pct
+end
+
+-- Recomputes recipe_done and recipe_total on an active scan session.
+-- Non-forced scans: done = cached recipe count. Forced rescans: done = list rows visited.
+function SkilletUtil.SyncScanSessionProgress(session, cached, progress_through_index)
+    if not session or not session.is_header then
+        return
+    end
+
+    session.recipe_total = SkilletUtil.CountNonHeaderRecipes(session.blizz_count, session.is_header)
+    if session.forced then
+        local through = progress_through_index
+        if through == nil then
+            through = session.next_index - 1
+        end
+        session.recipe_done = SkilletUtil.CountNonHeaderRecipesUpTo(
+            session.blizz_count, session.is_header, through)
+    else
+        session.recipe_done = SkilletUtil.CountCachedRecipes(
+            session.blizz_count, session.is_header, cached)
+    end
+end
+
+-- True when a scan session should show progress in the window title.
+function SkilletUtil.IsScanSessionUIActive(session)
+    if not session or session.pending then
+        return false
+    end
+    return true
+end
+
+-- True when the scan driver may process another chunk (not pending or waiting on shred retry).
+function SkilletUtil.IsScanSessionRunnable(session)
+    if not SkilletUtil.IsScanSessionUIActive(session) then
+        return false
+    end
+    if session.waiting_retry then
+        return false
+    end
+    return true
+end
+
+-- Refreshes header maps and recipe_total on a scan session when Blizzard row count changes.
+function SkilletUtil.SyncScanSessionBlizzCount(session, blizz_count)
+    session.blizz_count = blizz_count
+    session.is_header, session.live_links = SkilletUtil.BuildTradeSkillHeaderMaps(blizz_count)
+    session.recipe_total = SkilletUtil.CountNonHeaderRecipes(blizz_count, session.is_header)
 end
 
 -- Human-readable scan progress for tests and fallback display.

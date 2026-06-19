@@ -717,12 +717,7 @@
                 </Anchors>
                 <Scripts>
                     <OnClick>
-                        if this:GetChecked() then
-                            PlaySound("igMainMenuOptionCheckBoxOn");
-                        end
-                        local before = Skillet:GetTradeSkillOption(Skillet.currentTrade, "hideuncraftable")
-                        Skillet:SetTradeSkillOption(Skillet.currentTrade, "hideuncraftable", not before)
-                        Skillet:internal_RefreshInventoryCounts()
+                        Skillet:ToggleRecipeFilterOption("hideuncraftable", this)
                     </OnClick>
                 </Scripts>
             </CheckButton>
@@ -736,12 +731,7 @@
                 </Anchors>
                 <Scripts>
                     <OnClick>
-                        if this:GetChecked() then
-                            PlaySound("igMainMenuOptionCheckBoxOn");
-                        end
-                        local before = Skillet:GetTradeSkillOption(Skillet.currentTrade, "hidetrivial")
-                        Skillet:SetTradeSkillOption(Skillet.currentTrade, "hidetrivial", not before)
-                        Skillet:internal_RefreshRecipeList(true)
+                        Skillet:ToggleRecipeFilterOption("hidetrivial", this)
                     </OnClick>
                 </Scripts>
             </CheckButton>
