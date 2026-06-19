@@ -211,7 +211,7 @@ Skillet.options =
                     end,
                     set = function(value)
                         Skillet.db.profile.show_craft_counts = value
-                        Skillet:UpdateTradeSkillWindow()
+                        Skillet:internal_RefreshRecipeList(true)
                     end,
                     order = 20,
                 },
@@ -232,7 +232,7 @@ Skillet.options =
                     end,
                     set = function(value)
                         Skillet.db.profile.display_required_level = value
-                        Skillet:UpdateTradeSkillWindow()
+                        Skillet:internal_RefreshRecipeList(true)
                     end,
                     order = 1
                 },
@@ -246,7 +246,7 @@ Skillet.options =
                     end,
                     set = function(t)
                         Skillet.db.profile.transparency = t
-                        Skillet:UpdateTradeSkillWindow()
+                        Skillet:internal_RefreshWindowChrome()
                     end,
                     order = 2,
                 },
@@ -260,7 +260,7 @@ Skillet.options =
                     end,
                     set = function(t)
                         Skillet.db.profile.scale = t
-                        Skillet:UpdateTradeSkillWindow()
+                        Skillet:internal_RefreshWindowChrome()
                     end,
                     order = 3,
                 },
@@ -273,7 +273,7 @@ Skillet.options =
                     end,
                     set = function(value)
                         Skillet.db.profile.enhanced_recipe_display = value
-                        Skillet:UpdateTradeSkillWindow()
+                        Skillet:internal_RefreshRecipeList(true)
                     end,
                     order = 2,
                 },
@@ -303,7 +303,7 @@ Skillet.options =
                     end,
                     set = function(value)
                         Skillet.db.profile.show_bank_alt_counts = value
-                        Skillet:UpdateTradeSkillWindow()
+                        Skillet:internal_RefreshInventoryCounts()
                     end,
                     order = 2,
                 },
@@ -512,12 +512,41 @@ local function is_supported_trade(parent)
 end
 
 local scan_in_progress = false
-local need_rescan_on_open = false
+local need_inventory_refresh_on_open = false
 local forced_rescan = false
+local pending_selected_recipe = nil
+local scan_just_completed = false
+
+local function Skillet_clear_scan_flag()
+    scan_just_completed = false
+end
+
+local function capture_selected_recipe(self)
+    pending_selected_recipe = nil
+    if self.selectedSkill and self.currentTrade then
+        local data = self.stitch.data[self.currentTrade]
+        if data then
+            pending_selected_recipe = data[self.selectedSkill]
+        end
+    end
+end
+
+local function restore_selected_recipe(self)
+    if pending_selected_recipe and self.currentTrade then
+        local data = self.stitch.data[self.currentTrade]
+        if data then
+            local new_index = SkilletUtil.FindRecipeIndexByDataString(data, pending_selected_recipe)
+            if new_index then
+                self.selectedSkill = new_index
+            end
+        end
+    end
+    pending_selected_recipe = nil
+end
 
 function Skillet:ScanCompleted()
     if scan_in_progress then
-        if forced_rescan and not need_rescan_on_open then
+        if forced_rescan then
             -- only print this if we are not not doing a bag rescan,
             -- i.e. a first time or forced rescan.
             local name = self:GetTradeSkillLine()
@@ -526,10 +555,32 @@ function Skillet:ScanCompleted()
 
         self:UpdateScanningText("")
         scan_in_progress = false
-        need_rescan_on_open = false
         forced_rescan = false
+    end
+
+    local trade = self:GetTradeSkillLine()
+    if trade and trade ~= "UNKNOWN" then
+        self:RemapQueueAfterRescan(trade)
+        restore_selected_recipe(self)
+    end
+
+    if self.tradeSkillFrame and self.tradeSkillFrame:IsVisible() then
+        self:ResortRecipes(true)
         self:UpdateTradeSkillWindow()
     end
+
+    scan_just_completed = true
+    if not AceEvent:IsEventScheduled("Skillet_clear_scan_flag") then
+        AceEvent:ScheduleEvent("Skillet_clear_scan_flag", Skillet_clear_scan_flag, 0.1)
+    end
+end
+
+function Skillet:IsScanInProgress()
+    return scan_in_progress
+end
+
+function Skillet:IsScanJustCompleted()
+    return scan_just_completed
 end
 
 -- Checks to see if the list of recipes has been cached
@@ -546,15 +597,13 @@ local function cache_recipes_if_needed(self, force)
         return
     end
 
-    local count = self:GetNumTradeSkills(trade)
-    if count <= 0 and not force then
+    local blizz_count = GetNumTradeSkills()
+    if blizz_count <= 0 and not force then
         -- no recipes == no scan
         return false
     end
 
-    local recipes_known = (self.stitch:GetItemDataByIndex(trade, count) ~= nil)
-
-    if force or not recipes_known then
+    if force or self:IsRecipeCacheStale(trade) then
         forced_rescan = true
         self:RescanTrade(true)
         return true
@@ -621,10 +670,14 @@ function Skillet:TRADE_SKILL_UPDATE()
         return
     end
     self:UpdateTradeSkill()
-    if not AceEvent:IsEventScheduled("Skillet_redo_the_update") then
-        self:ResetTradeSkillWindow()
-        self:UpdateTradeSkillWindow()
+    if self:IsRecipeCacheStale() and not scan_in_progress then
+        capture_selected_recipe(self)
+        if cache_recipes_if_needed(self, false) then
+            return
+        end
     end
+    self:ResetTradeSkillWindow()
+    self:UpdateTradeSkillWindow()
 end
 
 -- Called when the trade skill window is closed
@@ -636,9 +689,12 @@ end
 -- Rescans the trades (and thus bags). Can only be called if the tradeskill
 -- window is open and a trade selected.
 local function Skillet_rescan_bags()
-    cache_recipes_if_needed(Skillet, false)
-    Skillet:UpdateTradeSkillWindow()
+    Skillet:internal_RefreshInventoryCounts()
     Skillet:UpdateShoppingListWindow()
+end
+
+local function Skillet_refresh_inventory_counts()
+    Skillet:internal_RefreshInventoryCounts()
 end
 
 -- So we can track when the players inventory changes and update craftable counts
@@ -659,9 +715,8 @@ function Skillet:BAG_UPDATE()
             AceEvent:ScheduleEvent("Skillet_rescan_bags", Skillet_rescan_bags, 0.25)
         end
     else
-       -- no trade window open, but something change, we will need to rescan
-       -- when the window is next opened.
-       need_rescan_on_open = true
+       -- Window closed; refresh inventory counts on next open, not recipe cache.
+       need_inventory_refresh_on_open = true
     end
 
     if MerchantFrame and MerchantFrame:IsVisible() then
@@ -699,7 +754,7 @@ function Skillet:UpdateTradeSkill()
         -- And start the update sequence through the rest of the mod
         self:SetSelectedTrade(new_trade)
 
-        cache_recipes_if_needed(self, need_rescan_on_open)
+        cache_recipes_if_needed(self, false)
 
         -- Load up any saved queued items for this profession
         self:LoadQueue(self.db.server.queues, new_trade)
@@ -720,6 +775,11 @@ function Skillet:internal_ShowTradeSkillWindow()
 
     if not frame:IsVisible() then
         ShowUIPanel(frame)
+    end
+
+    if need_inventory_refresh_on_open then
+        need_inventory_refresh_on_open = false
+        self:internal_RefreshInventoryCounts()
     end
 end
 
@@ -777,13 +837,13 @@ function Skillet:RescanTrade(forced)
     scan_in_progress = true
     local trade = self:GetTradeSkillLine()
     if trade and trade ~= "UNKNOWN" and is_known_trade_skill(trade) and not IsTradeSkillLinked() then
+        capture_selected_recipe(self)
         if forced then
             forced_rescan = true
         end
 
-        if forced_rescan and not need_rescan_on_open then
+        if forced_rescan then
             -- only print this for first time and forced rescans
-            -- not when a bag is changed
             self:Print(L["Scanning tradeskill"] .. ": " .. trade);
         end
 
@@ -822,13 +882,16 @@ function Skillet:SetSelectedSkill(skill_index, was_clicked)
     end
 
     self.selectedSkill = skill_index
+    if skill_index and skill_index > 0 then
+        SelectTradeSkill(skill_index)
+    end
     self:UpdateDetailsWindow(skill_index)
 end
 
 -- Updates the text we filter the list of recipes against.
 function Skillet:UpdateFilter(text)
     self:SetTradeSkillOption(self.currentTrade, "filtertext", text)
-    self:UpdateTradeSkillWindow()
+    self:internal_RefreshRecipeList(true)
 end
 
 -- Called when the queue has changed in some way
@@ -841,7 +904,7 @@ function Skillet:QueueChanged()
     -- to record any used reagents.
     if Skillet.tradeSkillFrame and Skillet.tradeSkillFrame:IsVisible() then
         if not AceEvent:IsEventScheduled("Skillet_UpdateWindows") then
-            AceEvent:ScheduleEvent("Skillet_UpdateWindows", Skillet.UpdateTradeSkillWindow, 0.5, self)
+            AceEvent:ScheduleEvent("Skillet_UpdateWindows", Skillet_refresh_inventory_counts, 0.5, self)
         end
     end
 

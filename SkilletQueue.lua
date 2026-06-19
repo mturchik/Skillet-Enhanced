@@ -105,6 +105,59 @@ function Skillet:LoadQueue(db, tradeskill)
     AceEvent:TriggerEvent("SkilletStitch_Queue_Add")
 end
 
+-- Updates queue indices after a tradeskill rescan. Queue entries store Blizzard
+-- indices that shift when recipes are learned; the stored recipe string is stable.
+function Skillet:RemapQueueAfterRescan(tradeskill)
+    if not tradeskill or not self.stitch.queue then
+        return false
+    end
+
+    local stitch = self.stitch
+    local data = stitch.data[tradeskill]
+    if not data then
+        return false
+    end
+
+    local changed = false
+    for _, entry in ipairs(stitch.queue) do
+        if entry.profession == tradeskill and entry.recipe then
+            local new_index = SkilletUtil.FindRecipeIndexByDataString(data, entry.recipe)
+
+            if not new_index then
+                local decoded = stitch:DecodeRecipe(entry.recipe)
+                if decoded and decoded.link then
+                    for index, recipe_string in pairs(data) do
+                        if type(index) == "number" and recipe_string then
+                            local candidate = stitch:DecodeRecipe(recipe_string)
+                            if candidate and candidate.link == decoded.link then
+                                new_index = index
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+
+            if new_index then
+                if new_index ~= entry.index then
+                    entry.index = new_index
+                    changed = true
+                end
+                if data[new_index] and entry.recipe ~= data[new_index] then
+                    entry.recipe = data[new_index]
+                    changed = true
+                end
+            end
+        end
+    end
+
+    if changed then
+        self:SaveQueue(self.db.server.queues, tradeskill)
+    end
+
+    return changed
+end
+
 -- Queue the max number of craftable items for the currently selected skill
 function Skillet:QueueAllItems()
 	if self.currentTrade and self.selectedSkill then
@@ -176,6 +229,7 @@ function Skillet:ProcessQueue()
 		return
 	end
 
+    self:RemapQueueAfterRescan(self.currentTrade)
 	self.stitch:ProcessQueue()
 end
 

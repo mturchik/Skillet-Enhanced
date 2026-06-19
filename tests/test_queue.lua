@@ -38,3 +38,31 @@ function TestQueue:test_doesNotDuplicatePlayerName()
     lu.assertEquals(3, list[1].count)
     lu.assertEquals("Alice", list[1].player)
 end
+
+function TestQueue:test_findRecipeIndexAfterLearnShiftsList()
+    local gold_core = "Gold Power Core;2840|link;o1;;"
+    local bronze = "Bronze Framework;2841|link;o1;;"
+    local gyro = "Gyrochronatom;2842|link;o1;;"
+
+    local new_data = {
+        [1] = gyro,
+        [2] = bronze,
+        [4] = gold_core,
+    }
+
+    lu.assertEquals(4, SkilletUtil.FindRecipeIndexByDataString(new_data, gold_core))
+    lu.assertEquals(2, SkilletUtil.FindRecipeIndexByDataString(new_data, bronze))
+    lu.assertNil(SkilletUtil.FindRecipeIndexByDataString(new_data, "missing"))
+end
+
+function TestQueue:test_findRecipeIndexByItemId()
+    local ids = {
+        [1] = 2842,
+        [2] = 2841,
+        [4] = 2840,
+    }
+
+    lu.assertEquals(4, SkilletUtil.FindRecipeIndexByItemId(ids, 2840))
+    lu.assertEquals(1, SkilletUtil.FindRecipeIndexByItemId(ids, 2842))
+    lu.assertNil(SkilletUtil.FindRecipeIndexByItemId(ids, 9999))
+end

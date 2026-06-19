@@ -57,6 +57,7 @@ local difficultyr = {
     trivial = "t",
 }
 local reserved_reagents = nil
+local inventory_snapshot = nil
 
 -- Returns the count of reagents of type 'link' that have
 -- already been reserved
@@ -141,13 +142,26 @@ local reagentmeta = {
     __index = function(self,key)
         local count = 0
         local reserved = get_reserved_reagent_count(self.link)
+        local snap = inventory_snapshot and inventory_snapshot[self.link]
 
         if key == "num" then
-            count = GetItemCount(self.link)
+            if snap then
+                count = snap.num or 0
+            else
+                count = GetItemCount(self.link)
+            end
         elseif key == "numwbank" then
-            count = GetItemCount(self.link,true)
+            if snap then
+                count = snap.numwbank or 0
+            else
+                count = GetItemCount(self.link,true)
+            end
         elseif key == "numwalts" and alt_lookup_function ~= nil then
-            count = alt_lookup_function(self.link) or 0
+            if snap and snap.numwalts ~= nil then
+                count = snap.numwalts
+            else
+                count = alt_lookup_function(self.link) or 0
+            end
         end
 
         return math.max(0, count - reserved)
@@ -258,7 +272,16 @@ function SkilletStitch:GetNumSkills(prof)
     elseif not self.data[prof] then
         return nil
     else
-        return #self.data[prof]
+        local max = 0
+        for k, _ in pairs(self.data[prof]) do
+            if type(k) == "number" and k > max then
+                max = k
+            end
+        end
+        if max == 0 then
+            return nil
+        end
+        return max
     end
 end
 
@@ -267,6 +290,31 @@ end
 -- when computing the craftable item counts.
 function SkilletStitch:SetReservedReagentsList(reagents)
     reserved_reagents = reagents
+end
+
+function SkilletStitch:SetInventorySnapshot(snapshot)
+    inventory_snapshot = snapshot
+end
+
+function SkilletStitch:ClearInventorySnapshot()
+    inventory_snapshot = nil
+end
+
+function SkilletStitch:BuildInventorySnapshot(link_set)
+    local snapshot = {}
+    if link_set then
+        for link, _ in pairs(link_set) do
+            snapshot[link] = {
+                num = GetItemCount(link),
+                numwbank = GetItemCount(link, true),
+            }
+            if alt_lookup_function then
+                snapshot[link].numwalts = alt_lookup_function(link) or 0
+            end
+        end
+    end
+    inventory_snapshot = snapshot
+    return snapshot
 end
 
 function SkilletStitch:EnableDataGathering(addon)
@@ -425,6 +473,13 @@ function SkilletStitch:SkilletStitch_AutoRescan()
         AceEvent:CancelScheduledEvent("SkilletStitch_AutoRescan")
     end
 
+    if Skillet and Skillet.IsScanInProgress and Skillet:IsScanInProgress() then
+        return
+    end
+    if Skillet and Skillet.IsRecipeCacheStale and not Skillet:IsRecipeCacheStale() then
+        return
+    end
+
     self:ScanTrade()
 end
 
@@ -439,7 +494,18 @@ function SkilletStitch:TRADE_SKILL_SHOW()
         self:ClearQueue()
     end
 
-    self:ScanTrade()
+    local skip_scan = false
+    if Skillet and Skillet.IsScanInProgress then
+        if Skillet:IsScanInProgress() or Skillet:IsScanJustCompleted() then
+            skip_scan = true
+        elseif Skillet.IsRecipeCacheStale and not Skillet:IsRecipeCacheStale() then
+            skip_scan = true
+        end
+    end
+
+    if not skip_scan then
+        self:ScanTrade()
+    end
 
     if self.data.UNKNOWN then
         self.data.UNKNOWN = nil

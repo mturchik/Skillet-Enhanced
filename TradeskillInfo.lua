@@ -121,6 +121,29 @@ function Skillet:GetNumTradeSkills()
     return math.max(stitch_count, blizz_count)
 end
 
+-- True when Stitch cache does not match the live Blizzard tradeskill list.
+function Skillet:IsRecipeCacheStale(trade)
+    trade = trade or self.currentTrade
+    if not trade or trade == "UNKNOWN" then
+        return false
+    end
+
+    local blizz_count = GetNumTradeSkills()
+    if blizz_count <= 0 then
+        return false
+    end
+
+    local cached = self.stitch.data[trade]
+    local is_header = {}
+
+    for i = 1, blizz_count, 1 do
+        local _, skillType = GetTradeSkillInfo(i)
+        is_header[i] = (skillType == "header")
+    end
+
+    return SkilletUtil.IsRecipeIndexCacheStale(blizz_count, is_header, cached)
+end
+
 -- =====================================================================
 --                      TradeSkill Query API
 -- =====================================================================

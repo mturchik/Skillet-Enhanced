@@ -126,3 +126,127 @@ function SkilletUtil.MapSortedRecipeIndex(index, sorted_recipes, sort_desc)
 
     return sorted_recipes[lookup]
 end
+
+-- Returns true when any non-header Blizzard recipe index lacks cached data.
+-- blizz_count includes header rows; cached is indexed by recipe position only.
+function SkilletUtil.IsRecipeIndexCacheStale(blizz_count, is_header_at, cached)
+    if not blizz_count or blizz_count <= 0 then
+        return false
+    end
+    if not cached then
+        return true
+    end
+
+    for i = 1, blizz_count, 1 do
+        if not is_header_at[i] then
+            if not cached[i] then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+function SkilletUtil.FindRecipeIndexByDataString(recipes_by_index, target)
+    if not recipes_by_index or not target then
+        return nil
+    end
+
+    for index, recipe_string in pairs(recipes_by_index) do
+        if type(index) == "number" and recipe_string == target then
+            return index
+        end
+    end
+
+    return nil
+end
+
+-- Finds the Blizzard tradeskill index for an item id after indices shift.
+function SkilletUtil.FindRecipeIndexByItemId(recipe_ids_by_index, target_id)
+    if not recipe_ids_by_index or not target_id then
+        return nil
+    end
+
+    for index, item_id in pairs(recipe_ids_by_index) do
+        if type(index) == "number" and item_id == target_id then
+            return index
+        end
+    end
+
+    return nil
+end
+
+-- Adds reagent links from a decoded recipe into a set keyed by link string.
+function SkilletUtil.AddReagentLinksFromRecipe(links_set, recipe, maxReagents)
+    maxReagents = maxReagents or 8
+    if not links_set or not recipe then
+        return links_set
+    end
+
+    for i = 1, maxReagents, 1 do
+        if recipe[i] and recipe[i].link then
+            links_set[recipe[i].link] = true
+        end
+    end
+
+    return links_set
+end
+
+-- Computes craftable counts from pre-resolved reagent quantities (testable).
+function SkilletUtil.ComputeCraftableCounts(reagents, nummade, prefer_non_vendor)
+    nummade = nummade or 1
+    if not reagents or #reagents == 0 then
+        return 0, 0, nil
+    end
+
+    local function min_craftable(use_bank, use_alts)
+        local num = 1000
+        local found = false
+        for _, v in ipairs(reagents) do
+            if not prefer_non_vendor or v.vendor == false then
+                local have = v.num or 0
+                if use_bank then
+                    have = v.numwbank or 0
+                end
+                if use_alts and v.numwalts ~= nil then
+                    have = v.numwalts or 0
+                end
+                if v.needed and v.needed > 0 then
+                    found = true
+                    local max = math.floor(have / v.needed) * nummade
+                    if max < num then
+                        num = max
+                    end
+                end
+            end
+        end
+        if not found or num == 1000 then
+            num = 0
+            for _, v in ipairs(reagents) do
+                if v.needed and v.needed > 0 then
+                    local have = v.num or 0
+                    if use_bank then
+                        have = v.numwbank or 0
+                    end
+                    if use_alts and v.numwalts ~= nil then
+                        have = v.numwalts or 0
+                    end
+                    local max = math.floor(have / v.needed) * nummade
+                    if max < num or num == 0 then
+                        num = max
+                    end
+                end
+            end
+        end
+        return num
+    end
+
+    local num = min_craftable(false, false)
+    local numwbank = min_craftable(true, false)
+    local numwalts = nil
+    if reagents[1] and reagents[1].numwalts ~= nil then
+        numwalts = min_craftable(false, true)
+    end
+
+    return num, numwbank, numwalts
+end

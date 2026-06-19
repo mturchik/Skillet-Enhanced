@@ -22,7 +22,19 @@ UpdateTradeSkillWindow → internal_UpdateTradeSkillWindow
 HideAllWindows → internal_HideAllWindows
 ```
 
-UI refresh flows through `internal_UpdateTradeSkillWindow()` — update sub-panels (`UpdateDetailsWindow`, `UpdateQueueWindow`) from there or its callers, not ad hoc scattered refreshes.
+UI refresh flows through tiered internals in `MainFrame.lua` (`internal_RefreshWindowChrome`, `internal_RefreshRecipeList`, `internal_RefreshInventoryCounts`, or full `internal_UpdateTradeSkillWindow`). Route cheap events to the narrowest tier; use full refresh only when structure or scan data changes.
+
+## Lua 5.1 local function order
+
+In Lua 5.1, a `local` name is **not** visible above its declaration line. A `local function` defined later in the file is **not** callable from earlier `local function` bodies — the name resolves as a nil global at runtime.
+
+When adding module-local helpers in `UI/*.lua`:
+
+1. Declare shared module locals first (`local num_recipe_buttons = 0`, caches, etc.)
+2. Define helpers before callers, **or** use forward declaration: `local helper` then `helper = function ... end`
+3. Prefer extending an existing helper with a parameter over duplicating a near-copy defined below the caller
+
+See `tests/test_lua_scope.lua` for executable examples.
 
 ## Existing UI Constants
 

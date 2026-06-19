@@ -25,6 +25,14 @@ Run this checklist after any change to UI, events, queue processing, or tradeski
 - [x] **13. Vendor buy** — Visit a vendor selling a needed reagent; Skillet buy button appears and purchases work
 - [x] **14. Linked tradeskill** — Open a tradeskill link from chat; Skillet does **not** replace the linked view
 - [x] **15. Options** — Run `/skillet config` out of combat; Waterfall options panel opens
+- [ ] **16. Learn recipe in-window** — With the profession window open, learn a new recipe from a trainer without closing the window; the new recipe appears automatically with no blank rows and reagent tooltips work without `SetTradeSkillItem` errors
+- [ ] **17. Learn recipe while sorted** — Repeat step 16 with sorting active (e.g. by name); confirm the new recipe appears in the correct sort order
+- [ ] **18. Learn recipe while queue active** — Queue a recipe, start crafting, then learn a new recipe from a trainer without closing the window; the queue entry must still show the original recipe (not a shifted neighbor)
+- [ ] **19. Scroll performance** — Scroll the recipe list rapidly; selection highlight stays on the selected recipe and the details panel does not flicker
+- [ ] **20. Bag update refresh** — Craft or loot a reagent with the window open; craftable counts update without the list resorting or title bar flickering
+- [ ] **21. Open scan once** — Open a profession; only one "Scanning tradeskill" message appears before the list populates
+- [ ] **22. Hide uncraftable performance** — On a large profession (e.g. Engineering), toggle **Hide uncraftable**; list filters without a long freeze
+- [ ] **23. Bank/alt counts** — Enable bank/alt counts in options; deposit a reagent to the bank and confirm visible `[bags/bank/alts]` brackets update correctly
 
 ## Automated Tests (off-client)
 
@@ -40,7 +48,7 @@ Or with Lua for Windows full path:
 & "C:\Program Files (x86)\Lua\5.1\lua.exe" tests/run.lua
 ```
 
-All tests should report `OK`. These cover link parsing, queue aggregation, sort index mapping, and filter matching — not UI or live crafting.
+All tests should report `OK`. These cover link parsing, queue aggregation, sort index mapping, filter matching, recipe cache staleness, and inventory count helpers — not UI or live crafting.
 
 ## Reporting Failures
 

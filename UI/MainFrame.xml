@@ -722,7 +722,7 @@
                         end
                         local before = Skillet:GetTradeSkillOption(Skillet.currentTrade, "hideuncraftable")
                         Skillet:SetTradeSkillOption(Skillet.currentTrade, "hideuncraftable", not before)
-                        Skillet:UpdateTradeSkillWindow()
+                        Skillet:internal_RefreshInventoryCounts()
                     </OnClick>
                 </Scripts>
             </CheckButton>
@@ -741,7 +741,7 @@
                         end
                         local before = Skillet:GetTradeSkillOption(Skillet.currentTrade, "hidetrivial")
                         Skillet:SetTradeSkillOption(Skillet.currentTrade, "hidetrivial", not before)
-                        Skillet:UpdateTradeSkillWindow()
+                        Skillet:internal_RefreshRecipeList(true)
                     </OnClick>
                 </Scripts>
             </CheckButton>

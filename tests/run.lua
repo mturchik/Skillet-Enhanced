@@ -27,5 +27,8 @@ require("test_links")
 require("test_queue")
 require("test_sort")
 require("test_filter")
+require("test_cache")
+require("test_inventory")
+require("test_lua_scope")
 
 os.exit(lu.LuaUnit.run())

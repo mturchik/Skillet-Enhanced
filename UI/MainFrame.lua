@@ -286,7 +286,7 @@ end
 
 -- Called when the list of skills is scrolled
 function Skillet:SkillList_OnScroll()
-    Skillet:UpdateTradeSkillWindow()
+    Skillet:internal_RefreshRecipeList(false)
 end
 
 -- Called when the list of queued items is scrolled
@@ -294,10 +294,17 @@ function Skillet:QueueList_OnScroll()
     Skillet:UpdateQueueWindow()
 end
 
+-- Recipe list module locals must be declared before any function that references
+-- them. In Lua 5.1, a local name is not visible above its declaration line; a
+-- reference there resolves as a (nil) global and fails at runtime.
+local num_recipe_buttons = 0
+local craftable_count_cache = nil
+
 -- Figures out whether or not the section a recipe
 -- is in has been hidden (collapsed or filtered).
--- Headers are, by definition never hidden
-local function is_hidden_skill(parent, skill_index)
+-- Headers are, by definition never hidden.
+-- skip_uncraftable: true while building inventory snapshots (before craftable cache exists).
+local function is_hidden_skill(parent, skill_index, skip_uncraftable)
 
     -- look up the info in stitch to avoid spamming the server with
     -- GetTradeSkillInfo() calls. It does not seem to like that
@@ -331,8 +338,16 @@ local function is_hidden_skill(parent, skill_index)
     end
 
     -- are we hiding anything that can't be created with the mats on this character?
-    if s.numcraftablewbank == 0 and parent:GetTradeSkillOption(parent.currentTrade, "hideuncraftable") then
-        return true
+    if not skip_uncraftable and parent:GetTradeSkillOption(parent.currentTrade, "hideuncraftable") then
+        local numwbank
+        if craftable_count_cache and craftable_count_cache[skill_index] then
+            numwbank = craftable_count_cache[skill_index].numwbank
+        else
+            numwbank = s.numcraftablewbank
+        end
+        if numwbank == 0 then
+            return true
+        end
     end
 
     -- are we hiding anything that is trivial (has no chance of giving a skill point)
@@ -344,12 +359,87 @@ local function is_hidden_skill(parent, skill_index)
 
 end
 
-local function Skillet_redo_the_update(self)
-    AceEvent:CancelScheduledEvent("Skillet_redo_the_update")
-    self:UpdateTradeSkillWindow()
+-- Collects reagent links needed for an inventory snapshot on this refresh.
+local function collect_snapshot_links(self)
+    local links = {}
+    local max_reagents = SKILLET_NUM_REAGENT_BUTTONS
+
+    if self.selectedSkill then
+        local s = self.stitch:GetItemDataByIndex(self.currentTrade, self.selectedSkill)
+        if s then
+            SkilletUtil.AddReagentLinksFromRecipe(links, s, max_reagents)
+        end
+    end
+
+    local numTradeSkills = self:GetNumTradeSkills()
+    local button_count = math.floor(SkilletSkillList:GetHeight() / SKILLET_TRADE_SKILL_HEIGHT)
+    local skillOffset = FauxScrollFrame_GetOffset(SkilletSkillList)
+
+    for i = 1, button_count, 1 do
+        local skillIndex = i + skillOffset
+        while skillIndex <= numTradeSkills do
+            local mapped_index = self:GetSortedRecipeIndex(skillIndex)
+            if mapped_index and not is_hidden_skill(self, mapped_index, true) then
+                break
+            end
+            skillOffset = skillOffset + 1
+            skillIndex = i + skillOffset
+        end
+        if skillIndex <= numTradeSkills then
+            skillIndex = self:GetSortedRecipeIndex(skillIndex)
+            local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
+            if s then
+                SkilletUtil.AddReagentLinksFromRecipe(links, s, max_reagents)
+            end
+        end
+    end
+
+    if self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
+        for skillIndex = 1, numTradeSkills, 1 do
+            local _, skillType = self:GetTradeSkillInfo(skillIndex)
+            if skillType and skillType ~= "header" then
+                local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
+                if s then
+                    SkilletUtil.AddReagentLinksFromRecipe(links, s, max_reagents)
+                end
+            end
+        end
+    end
+
+    return links
 end
 
-local num_recipe_buttons = 0
+local function build_craftable_count_cache(self)
+    craftable_count_cache = {}
+    if not self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
+        return
+    end
+
+    local numTradeSkills = self:GetNumTradeSkills()
+    for skillIndex = 1, numTradeSkills, 1 do
+        local _, skillType = self:GetTradeSkillInfo(skillIndex)
+        if skillType and skillType ~= "header" then
+            local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
+            if s then
+                craftable_count_cache[skillIndex] = {
+                    num = s.numcraftable,
+                    numwbank = s.numcraftablewbank,
+                    numwalts = s.numcraftablewalts,
+                }
+            end
+        end
+    end
+end
+
+local function prepare_inventory_snapshot(self)
+    local links = collect_snapshot_links(self)
+    self.stitch:BuildInventorySnapshot(links)
+end
+
+local function clear_inventory_snapshot(self)
+    self.stitch:ClearInventorySnapshot()
+    craftable_count_cache = nil
+end
 local function get_recipe_button(i)
     local button = getglobal("SkilletScrollButton"..i)
     if not button then
@@ -406,16 +496,200 @@ local function hide_button(button, trade, skill, index)
     button:Hide()
 end
 
--- Updates the trade skill window whenever anything has changed,
--- number of skills, skill type, skill level, etc
-function Skillet:internal_UpdateTradeSkillWindow()
+-- Paints visible recipe scroll buttons. syncSelection: SelectTradeSkill for ArmorCraft.
+-- updateCounts: paint [bags/bank/alts] brackets (requires reserved reagents already set).
+local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
+    local numTradeSkills = self:GetNumTradeSkills()
+    self:ResortRecipes()
+
+    local button_count = SkilletSkillList:GetHeight() / SKILLET_TRADE_SKILL_HEIGHT
+    button_count = math.floor(button_count)
+
+    FauxScrollFrame_Update(SkilletSkillList,
+                           numTradeSkills,
+                           button_count,
+                           SKILLET_TRADE_SKILL_HEIGHT)
+
+    local skillOffset = FauxScrollFrame_GetOffset(SkilletSkillList)
+    SkilletHighlightFrame:Hide()
+
+    local width = SkilletSkillListParent:GetWidth() - 10
+    if SkilletSkillList:IsVisible() then
+        width = width - 20
+    end
+    local max_text_width = width
+
+    for i = 1, button_count, 1 do
+        num_recipe_buttons = math.max(num_recipe_buttons, i)
+
+        local skillIndex = i + skillOffset
+        local button = get_recipe_button(i)
+        button:SetWidth(width)
+
+        while (skillIndex <= numTradeSkills) do
+            local mapped_index = self:GetSortedRecipeIndex(skillIndex)
+            if mapped_index and not is_hidden_skill(self, mapped_index) then
+                break
+            end
+            skillOffset = skillOffset + 1
+            skillIndex = i + skillOffset
+        end
+
+        if (skillIndex <= numTradeSkills) then
+            skillIndex = self:GetSortedRecipeIndex(skillIndex)
+
+            local skillName, skillType = self:GetTradeSkillInfo(skillIndex)
+            if not skillName then
+                local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
+                if s == nil then
+                    skillType = "header"
+                    skillName = ""
+                else
+                    skillName = s.name
+                end
+            end
+
+            local buttonText = getglobal(button:GetName() .. "Name")
+            local levelText = getglobal(button:GetName() .. "Level")
+            local countText = getglobal(button:GetName() .. "Counts")
+
+            buttonText:SetText("")
+            levelText:SetText("")
+            countText:SetText("")
+            levelText:Hide()
+            countText:Hide()
+
+            local skill_color = skill_style_type[skillType]
+            if skill_color then
+                buttonText:SetTextColor(skill_color.r, skill_color.g, skill_color.b)
+                countText:SetTextColor(skill_color.r, skill_color.g, skill_color.b)
+            else
+                buttonText:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+                countText:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+            end
+
+            if skillType == "header" then
+                local collapsed = false
+                if self.headerCollapsedState and self.headerCollapsedState[skillName] then
+                    collapsed = self.headerCollapsedState[skillName]
+                end
+
+                if collapsed then
+                    button:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+                else
+                    button:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
+                end
+
+                buttonText:SetText(skillName)
+                levelText:SetWidth(20)
+                buttonText:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+                button:SetID(-1)
+                button:UnlockHighlight()
+
+                local button_width = button:GetTextWidth()
+                local text = skillName
+                while button_width > max_text_width do
+                    text = string.sub(text, 0, -2)
+                    buttonText:SetText(text .. "..")
+                    button_width = button:GetTextWidth()
+                end
+
+                show_button(button, self.currentTrade, skillIndex, i)
+            else
+                button:SetNormalTexture("")
+                getglobal(button:GetName() .. "Highlight"):SetTexture("")
+
+                local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
+                local text = ""
+
+                if s then
+                    text = text .. (self:GetRecipeNamePrefix(self.currentTrade, skillIndex) or "")
+
+                    if self.db.profile.display_required_level then
+                        local level = self:GetLevelRequiredToUse(s.link)
+                        if level and level > 1 then
+                            local _, r, g, b = self:GetQualityFromLink(s.link)
+                            if r and g and b then
+                                levelText:SetTextColor(r, g, b)
+                            end
+                            levelText:SetText("[" .. level .. "]")
+                        end
+                        levelText:Show()
+                        levelText:SetWidth(25)
+                    else
+                        levelText:SetWidth(10)
+                    end
+
+                    text = text .. s.name
+
+                    if updateCounts then
+                        local num, numwbank, numwalts = get_craftable_counts(s)
+                        if num > 0 or numwbank > 0 or (numwalts and numwalts > 0) then
+                            local count = "[" .. num
+                            if self.db.profile.show_bank_alt_counts then
+                                count = count .. "/" .. numwbank
+                                if numwalts then
+                                    count = count .. "/" .. numwalts
+                                end
+                            end
+                            count = count .. "]"
+                            countText:SetText(count)
+                            countText:Show()
+                        end
+                    end
+
+                    button:SetID(skillIndex)
+
+                    if self.db.profile.enhanced_recipe_display and skill_color then
+                        text = text .. skill_color.alttext
+                    end
+
+                    text = text .. (self:GetRecipeNameSuffix(self.currentTrade, skillIndex) or "")
+                end
+
+                buttonText:SetText(text)
+
+                local button_width = button:GetTextWidth()
+                while button_width > max_text_width do
+                    text = string.sub(text, 0, -2)
+                    buttonText:SetText(text .. "..")
+                    button_width = button:GetTextWidth()
+                end
+
+                if self.selectedSkill and self.selectedSkill == skillIndex then
+                    if syncSelection then
+                        SelectTradeSkill(self.selectedSkill)
+                    end
+
+                    SkilletHighlightFrame:SetPoint("TOPLEFT", "SkilletScrollButton"..i, "TOPLEFT", 0, 0)
+                    SkilletHighlightFrame:SetWidth(button:GetWidth())
+                    SkilletHighlightFrame:SetFrameLevel(button:GetFrameLevel())
+                    SkilletHighlight:SetTexture(0.7, 0.7, 0.7, 0.4)
+                    SkilletHighlightFrame:Show()
+                    button:LockHighlight()
+                else
+                    button:UnlockHighlight()
+                end
+
+                show_button(button, self.currentTrade, skillIndex, i)
+            end
+        else
+            hide_button(button, self.currentTrade, skillIndex, i)
+            button:UnlockHighlight()
+        end
+    end
+
+    for i = button_count + 1, num_recipe_buttons, 1 do
+        local button = get_recipe_button(i)
+        hide_button(button, self.currentTrade, 0, i)
+    end
+end
+
+function Skillet:internal_RefreshWindowChrome()
     if not self.currentTrade or self.currentTrade == "UNKNOWN" then
-        -- nothing to see, nothing to update
-        self:SetSelectedSkill(nil)
         return
     end
 
-    -- If it's link-able, show the link button.
     if GetTradeSkillListLink() then
         SkilletTradeSkillLinkButton:Show()
     else
@@ -435,11 +709,9 @@ function Skillet:internal_UpdateTradeSkillWindow()
     SkilletQueueParent:Show()
     SkilletStartQueueButton:Show()
     SkilletEmptyQueueButton:Show()
-
-    -- shopping list button always shown
     SkilletShoppingListButton:Show()
 
-    local width = SkilletFrame:GetWidth() - 20 -- for padding.
+    local width = SkilletFrame:GetWidth() - 20
     local reagent_width = width / 2
     if reagent_width < SKILLET_REAGENT_MIN_WIDTH then
         reagent_width = SKILLET_REAGENT_MIN_WIDTH
@@ -450,281 +722,81 @@ function Skillet:internal_UpdateTradeSkillWindow()
     SkilletReagentParent:SetWidth(reagent_width)
     SkilletQueueParent:SetWidth(reagent_width)
 
-    local width = SkilletFrame:GetWidth() - reagent_width - 20 -- padding
+    width = SkilletFrame:GetWidth() - reagent_width - 20
     SkilletSkillListParent:SetWidth(width)
 
-    -- Set the state of any craft specific options
     SkilletHideTrivialRecipes:SetChecked(self:GetTradeSkillOption(self.currentTrade, "hidetrivial"))
     SkilletHideUncraftableRecipes:SetChecked(self:GetTradeSkillOption(self.currentTrade, "hideuncraftable"))
 
-    self:UpdateQueueWindow()
-
-    local _, rank, maxRank = self:GetTradeSkillLine();
-
-    -- Window Title
-    local title = getglobal("SkilletTitleText");
+    local _, rank, maxRank = self:GetTradeSkillLine()
+    local title = getglobal("SkilletTitleText")
     if title then
         title:SetText(L["Skillet Trade Skills"] .. ": " .. self.currentTrade)
     end
 
-    local numTradeSkills = self:GetNumTradeSkills()
-    -- Will only sort recipes if something has changed
-    -- and there is a sorting method selected.
-    self:ResortRecipes()
-
-    -- List of all the reagents we need for all queued recipies
-    -- for this player. This is used to ajust the craftable item
-    -- count
-    local queued_reagents = self:GetReagentsForQueuedRecipes(UnitName("player"));
-    -- Tell the Stitch library about the queued items so it knows how
-    -- to adjust its item counts.
-    self.stitch:SetReservedReagentsList(queued_reagents);
-
-    -- Progression status bar
     SkilletRankFrame:SetMinMaxValues(0, maxRank)
     SkilletRankFrame:SetValue(rank)
-    SkilletRankFrameSkillRank:SetText(rank.."/"..maxRank)
+    SkilletRankFrameSkillRank:SetText(rank .. "/" .. maxRank)
+end
 
-    local button_count = SkilletSkillList:GetHeight() / SKILLET_TRADE_SKILL_HEIGHT
-    button_count = math.floor(button_count)
-
-    -- Update the scroll frame
-    FauxScrollFrame_Update(SkilletSkillList,                -- frame
-                           numTradeSkills,                  -- num items
-                           button_count,                    -- num to display
-                           SKILLET_TRADE_SKILL_HEIGHT)      -- value step (item height)
-
-    -- Where in the list of skill to start counting.
-    local skillOffset = FauxScrollFrame_GetOffset(SkilletSkillList);
-
-    -- Remove any selected highlight, it will be added back as needed
-    SkilletHighlightFrame:Hide();
-
-    local nilFound = false
-    width = SkilletSkillListParent:GetWidth() - 10
-    if SkilletSkillList:IsVisible() then
-        -- adjust for the width of the scroll bar, if it is visible.
-        width = width - 20
-    end
-    local max_text_width = width
-
-    -- Iterate through all the buttons that make up the scroll window
-    -- and fill them in with data or hide them, as necessary
-    for i=1, button_count, 1 do
-        num_recipe_buttons = math.max(num_recipe_buttons, i)
-
-        local skillIndex = i + skillOffset
-        local button = get_recipe_button(i)
-
-        button:SetWidth(width)
-
-        -- skip over any hidden skills
-        while (skillIndex <= numTradeSkills) do
-            -- want to check the mapped name to see it it is hidden
-            local mapped_index = self:GetSortedRecipeIndex(skillIndex)
-
-            -- mapped index may be nil as the sorted_table is smaller than
-            -- the standard table (all headers removed)
-
-            if mapped_index and not is_hidden_skill(self, mapped_index) then
-                -- nope, not skipping this one
-                break
-            end
-
-            skillOffset = skillOffset + 1
-            skillIndex = i + skillOffset
-        end
-
-        if ( skillIndex <= numTradeSkills ) then
-
-            skillIndex = self:GetSortedRecipeIndex(skillIndex)
-
-            local skillName, skillType = self:GetTradeSkillInfo(skillIndex)
-            if not skillName then
-                local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
-                if s == nil then
-                    skillType = "header"
-                    skillName = ""
-                    nilFound = true
-                else
-                    skillName = s.name
-                end
-            end
-
-            local buttonText = getglobal(button:GetName() .. "Name")
-            local levelText = getglobal(button:GetName() .. "Level")
-            local countText = getglobal(button:GetName() .. "Counts")
-
-            buttonText:SetText("")
-            levelText:SetText("")
-            countText:SetText("")
-
-            levelText:Hide()
-            countText:Hide()
-
-            local skill_color = skill_style_type[skillType]
-            if skill_color then
-                buttonText:SetTextColor(skill_color.r, skill_color.g, skill_color.b)
-                countText:SetTextColor(skill_color.r, skill_color.g, skill_color.b)
-            else
-                buttonText:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
-                countText:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
-            end
-
-            if skillType == "header" then
-                local collapsed = false;
-                if self.headerCollapsedState and self.headerCollapsedState[skillName] then
-                    collapsed = self.headerCollapsedState[skillName]
-                end
-
-                if collapsed then
-                    -- Collapsed
-                    button:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
-                else
-                    -- expanded
-                    button:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
-                end
-
-                buttonText:SetText(skillName)
-                levelText:SetWidth(20)
-                buttonText:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
-
-                button:SetID(-1)
-                button:UnlockHighlight() -- headers never get highlighted
-
-                local button_width = button:GetTextWidth()
-                while button_width > max_text_width do
-                    text = string.sub(text, 0, -2)
-                    buttonText:SetText(text .. "..")
-                    button_width = button:GetTextWidth()
-                end
-
-                show_button(button, self.currentTrade, skillIndex, i)
-
-            else
-
-                button:SetNormalTexture("")
-                getglobal(button:GetName() .. "Highlight"):SetTexture("")
-
-                local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
-
-                local text = ""
-                if s then
-                    text = text .. (self:GetRecipeNamePrefix(self.currentTrade, skillIndex) or "")
-
-                    -- if the item has a minimum level requirement, then print that here
-                    if self.db.profile.display_required_level then
-                        local level = self:GetLevelRequiredToUse(s.link)
-
-                        if level and level > 1 then
-                            local _, r, g, b = self:GetQualityFromLink(s.link)
-                            if r and g and b then
-                                levelText:SetTextColor(r, g, b)
-                            end
-                            levelText:SetText("[" .. level .. "]")
-                        end
-
-                        levelText:Show()
-                        levelText:SetWidth(25)
-                    else
-                        levelText:SetWidth(10)
-                    end
-
-                    text = text .. s.name
-                    local num, numwbank, numwalts = get_craftable_counts(s)
-                    if num > 0 or numwbank > 0 or (numwalts and numwalts > 0) then
-                        local count = "[" .. num
-                        -- only show bank and alt counts if it has been enabled
-                        -- through the options.
-                        if self.db.profile.show_bank_alt_counts then
-                            count = count .. "/" .. numwbank
-                            if numwalts then
-                                -- only show this if there is a mod installed that
-                                -- allows Stitch to collect the information.
-                                count = count .. "/" .. numwalts
-                            end
-                        end
-                        count = count .. "]"
-                        countText:SetText(count)
-                        countText:Show()
-                    end
-                    button:SetID(skillIndex)
-
-                    -- If enhanced recipe display is eanbled, show the difficulty as text,
-                    -- rather than as a colour. This should help used that have problems
-                    -- distinguishing between the difficulty colours we use.
-                    if self.db.profile.enhanced_recipe_display then
-                        text = text .. skill_color.alttext;
-                    end
-
-                    text = text .. (self:GetRecipeNameSuffix(self.currentTrade, skillIndex) or "")
-                else
-                    nilFound = true
-                    -- not cached yet
-                end
-
-                buttonText:SetText(text)
-
-                -- update the width we use for checking for text truncation
-                local button_width = button:GetTextWidth()
-                while button_width > max_text_width do
-                    text = string.sub(text, 0, -2)
-                    button:SetText(text .. "..")
-                    button_width = button:GetTextWidth()
-                end
-
-                if ( self.selectedSkill and self.selectedSkill == skillIndex ) then
-                    -- user has this skill selected
-
-                    -- This is so mods that call GetTradeSkillSelectionIndex() will work
-                    -- tested with ArmorCraft.
-                    SelectTradeSkill(self.selectedSkill)
-
-                    SkilletHighlightFrame:SetPoint("TOPLEFT", "SkilletScrollButton"..i, "TOPLEFT", 0, 0)
-                    SkilletHighlightFrame:SetWidth(button:GetWidth())
-                    SkilletHighlightFrame:SetFrameLevel(button:GetFrameLevel())
-
-                    if color then
-                        SkilletHighlight:SetTexture(color.r, color.g, color.b, 0.4)
-                    else
-                        SkilletHighlight:SetTexture(0.7, 0.7, 0.7, 0.4)
-                    end
-
-                    -- And update the details for this skill, just in case something
-                    -- has changed (mats consumed, etc)
-                    self:UpdateDetailsWindow(self.selectedSkill)
-
-                    SkilletHighlightFrame:Show()
-                    button:LockHighlight()
-
-                else
-                    -- not selected
-                    button:SetBackdropColor(0.8, 0.2, 0.2);
-                    button:UnlockHighlight();
-                end
-
-                show_button(button, self.currentTrade, skillIndex, i)
-
-            end
-        else
-            -- We have no data for you Mister Button .....
-            hide_button(button, self.currentTrade, skillIndex, i)
-            button:UnlockHighlight()
-        end
+function Skillet:internal_RefreshRecipeList(syncSelection)
+    if not self.currentTrade or self.currentTrade == "UNKNOWN" then
+        self:SetSelectedSkill(nil)
+        return
     end
 
-    -- Hide any of the buttons that we created but don't need right now
-    for i = button_count+1, num_recipe_buttons, 1 do
-        local button = get_recipe_button(i)
-        hide_button(button, self.currentTrade, 0, i)
+    paint_recipe_scroll_list(self, syncSelection, true)
+end
+
+function Skillet:internal_RefreshInventoryCounts()
+    if not self.currentTrade or self.currentTrade == "UNKNOWN" then
+        return
     end
 
-    if nilFound then
-        if not AceEvent:IsEventScheduled("Skillet_redo_the_update") then
-            AceEvent:ScheduleEvent("Skillet_redo_the_update", 0.25, self)
-        end
+    prepare_inventory_snapshot(self)
+
+    local queued_reagents = self:GetReagentsForQueuedRecipes(UnitName("player"))
+    self.stitch:SetReservedReagentsList(queued_reagents)
+    build_craftable_count_cache(self)
+
+    if self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
+        self:ResortRecipes(true)
     end
 
+    paint_recipe_scroll_list(self, true, true)
+
+    if self.selectedSkill then
+        self:UpdateDetailsWindow(self.selectedSkill)
+    end
+
+    self:UpdateQueueWindow()
+    clear_inventory_snapshot(self)
+end
+
+-- Updates the trade skill window whenever anything has changed,
+-- number of skills, skill type, skill level, etc
+function Skillet:internal_UpdateTradeSkillWindow()
+    if not self.currentTrade or self.currentTrade == "UNKNOWN" then
+        self:SetSelectedSkill(nil)
+        return
+    end
+
+    self:internal_RefreshWindowChrome()
+
+    prepare_inventory_snapshot(self)
+
+    local queued_reagents = self:GetReagentsForQueuedRecipes(UnitName("player"))
+    self.stitch:SetReservedReagentsList(queued_reagents)
+    build_craftable_count_cache(self)
+
+    paint_recipe_scroll_list(self, true, true)
+
+    if self.selectedSkill then
+        self:UpdateDetailsWindow(self.selectedSkill)
+    end
+
+    self:UpdateQueueWindow()
+    clear_inventory_snapshot(self)
 end
 
 -- Display an action packed tooltip when we are over
@@ -835,7 +907,8 @@ end
 function Skillet:SetTradeSkillToolTip(skill, index)
     GameTooltip:ClearLines();
 
-    if not skill or skill < 1 or skill > self:GetNumTradeSkills() then
+    local blizz_count = GetNumTradeSkills()
+    if not skill or skill < 1 or skill > blizz_count or skill > self:GetNumTradeSkills() then
         return
     end
 
@@ -1151,7 +1224,7 @@ function Skillet:SkillButton_OnClick(button)
             end
         end
 
-        self:UpdateTradeSkillWindow()
+        self:internal_RefreshRecipeList(true)
     end
 end
 
