@@ -1,0 +1,40 @@
+## Example 1
+
+Message: Interface\AddOns\Skillet\UI\MainFrame.lua:862: Invalid trade skill item in SetTradeSkillItem(index [,reagent])
+Time: 06/19/26 11:38:06
+Count: 3
+Stack: [C]: in function `SetTradeSkillItem'
+Interface\AddOns\Skillet\UI\MainFrame.lua:862: in function `SetTradeSkillToolTip'
+[string "*:OnEnter"]:2: in function <[string "*:OnEnter"]:1>
+
+Locals: (*temporary) = GameTooltip {
+ updateTooltip = 0.13299999833107
+ numMoneyFrames = 1
+ 0 = <userdata>
+ comparing = false
+ hasMoney = 1
+ shoppingTooltips = <table> {
+ }
+}
+(*temporary) = 44
+(*temporary) = 1
+
+## Example 2
+Message: Interface\AddOns\Skillet\UI\MainFrame.lua:862: Invalid trade skill item in SetTradeSkillItem(index [,reagent])
+Time: 06/19/26 11:39:04
+Count: 4
+Stack: [C]: in function `SetTradeSkillItem'
+Interface\AddOns\Skillet\UI\MainFrame.lua:862: in function `SetTradeSkillToolTip'
+[string "*:OnEnter"]:2: in function <[string "*:OnEnter"]:1>
+
+Locals: (*temporary) = GameTooltip {
+ numMoneyFrames = 1
+ updateTooltip = 0.066999998688698
+ hasMoney = 1
+ comparing = false
+ 0 = <userdata>
+ shoppingTooltips = <table> {
+ }
+}
+(*temporary) = 44
+(*temporary) = 1
