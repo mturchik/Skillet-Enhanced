@@ -76,65 +76,56 @@ local function get_reserved_reagent_count(link)
     return count
 end
 
+local VENDOR_REAGENT_OVERRIDES = {
+    [30817] = true, -- simple flour
+    [4539] = true,  -- Goldenbark Apple
+    [38426] = true, -- Eternium Thread
+    [2593] = true,  -- Flask of Port
+    [34412] = true, -- Sparkling Apple Cider
+    [39354] = true, -- Light Parchment
+}
+
+local function is_vendor_reagent(reagentlink)
+    if not PT then
+        return false
+    end
+    if PT:ItemInSet(reagentlink, "Tradeskill.Mat.BySource.Vendor") then
+        return true
+    end
+
+    local id = SkilletUtil.GetItemIDFromLink(reagentlink)
+    return id and VENDOR_REAGENT_OVERRIDES[id] or false
+end
+
+local function compute_numcraftable(recipe, qty_key)
+    local num = 1000
+    for _, v in ipairs(recipe) do
+        if v.vendor == false then
+            local max = math.floor((v[qty_key] or 0) / v.needed) * recipe.nummade
+            if max < num then
+                num = max
+            end
+        end
+    end
+    if num == 1000 then
+        for _, v in ipairs(recipe) do
+            local max = math.floor((v[qty_key] or 0) / v.needed) * recipe.nummade
+            if max < num then
+                num = max
+            end
+        end
+    end
+    return num
+end
+
 local itemmeta = {
     __index = function(self,key)
         if key == "numcraftable" then
-            local num = 1000
-            for _,v in ipairs(self) do
-                if v.vendor == false then
-                    local max = math.floor(v.num/v.needed)*self.nummade
-                    if max < num then
-                        num = max
-                    end
-                end
-            end
-            if num == 1000 then
-                for _,v in ipairs(self) do
-                    local max = math.floor(v.num/v.needed)*self.nummade
-                    if max < num then
-                        num = max
-                    end
-                end
-            end
-            return num
+            return compute_numcraftable(self, "num")
         elseif key == "numcraftablewbank" then
-            local num = 1000
-            for _,v in ipairs(self) do
-                if v.vendor == false then
-                    local max = math.floor(v.numwbank/v.needed)*self.nummade
-                    if max < num then
-                        num = max
-                    end
-                end
-            end
-            if num == 1000 then
-                for _,v in ipairs(self) do
-                    local max = math.floor(v.numwbank/v.needed)*self.nummade
-                    if max < num then
-                        num = max
-                    end
-                end
-            end
-            return num
+            return compute_numcraftable(self, "numwbank")
         elseif key == "numcraftablewalts" and alt_lookup_function then
-            local num = 1000
-            for _,v in ipairs(self) do
-                if v.vendor == false then
-                    local max = math.floor(v.numwalts/v.needed)*self.nummade
-                    if max < num then
-                        num = max
-                    end
-                end
-            end
-            if num == 1000 then
-                for _,v in ipairs(self) do
-                    local max = math.floor(v.numwalts/v.needed)*self.nummade
-                    if max < num then
-                        num = max
-                    end
-                end
-            end
-            return num
+            return compute_numcraftable(self, "numwalts")
         end
     end
 }
@@ -235,24 +226,7 @@ function SkilletStitch:DecodeRecipe(datastring)
     for reagentnum, reagentlink in reagentchunk:gmatch("([^;]+);([^;]+);") do
         reagentlink = SkilletUtil.UnsquishLink(reagentlink)
         local texture = select(10, GetItemInfo(reagentlink))
-        local vendor = false
-        if PT then
-            vendor = PT:ItemInSet(reagentlink,"Tradeskill.Mat.BySource.Vendor")
-            if not vendor then vendor = false end
-
-            -- Workaround for missing items in the Periodic table library that
-            local _,_,id = string.find(reagentlink, "|Hitem:(%d+):")
-            id = tonumber(id)
-            if id == 30817 or id == 4539 or id == 38426 or id == 2593 or id == 34412 or id == 39354 then
-                -- 30817 == simple flour
-                -- 4539 == Goldenbark Apple
-                -- 38426 == Eternium Thread
-                -- 2593 == Flask of Port
-                -- 34412 == Sparkling Apple Cider
-				-- 39354 == Light Parchment 
-                vendor = true
-            end
-        end
+        local vendor = is_vendor_reagent(reagentlink)
 
         table.insert(s,setmetatable({
             name = reagentlink:match("%|h%[([^%]]+)%]%|h"),
@@ -473,14 +447,19 @@ function SkilletStitch:SkilletStitch_AutoRescan()
         AceEvent:CancelScheduledEvent("SkilletStitch_AutoRescan")
     end
 
-    if Skillet and Skillet.IsScanInProgress and Skillet:IsScanInProgress() then
+    local prof = GetTradeSkillLine()
+    if Skillet and Skillet.IsScanInProgress and Skillet:IsScanInProgress(prof) then
         return
     end
-    if Skillet and Skillet.IsRecipeCacheStale and not Skillet:IsRecipeCacheStale() then
+    if Skillet and Skillet.IsRecipeCacheStale and not Skillet:IsRecipeCacheStale(prof) then
         return
     end
 
-    self:ScanTrade()
+    if Skillet and Skillet.RequestRecipeScan then
+        Skillet:RequestRecipeScan(prof, { notify = false })
+    else
+        self:ScanTrade()
+    end
 end
 
 function SkilletStitch:TRADE_SKILL_SHOW()
@@ -496,14 +475,16 @@ function SkilletStitch:TRADE_SKILL_SHOW()
 
     local skip_scan = false
     if Skillet and Skillet.IsScanInProgress then
-        if Skillet:IsScanInProgress() or Skillet:IsScanJustCompleted() then
+        if Skillet:IsScanInProgress(recenttrade) then
             skip_scan = true
-        elseif Skillet.IsRecipeCacheStale and not Skillet:IsRecipeCacheStale() then
+        elseif Skillet.IsScanJustCompleted and Skillet:IsScanJustCompleted(recenttrade) then
+            skip_scan = true
+        elseif Skillet.IsRecipeCacheStale and not Skillet:IsRecipeCacheStale(recenttrade) then
             skip_scan = true
         end
     end
 
-    if not skip_scan then
+    if not skip_scan and not (Skillet and Skillet.RequestRecipeScan) then
         self:ScanTrade()
     end
 
@@ -615,72 +596,97 @@ function SkilletStitch:GetNumQueuedItems(index)
     return count
 end
 
-function SkilletStitch:ScanTrade()
-    local prof = GetTradeSkillLine()
+local function scan_recipe_index(self, prof, i)
+    local skillname, skilltype = GetTradeSkillInfo(i)
+    if skilltype == "header" or not skillname then
+        self.data[prof][i] = nil
+        return false, false
+    end
+
+    local link = GetTradeSkillItemLink(i)
+    if not link then
+        return false, true
+    end
+
+    local v1, _, v2, _, v3, _, v4 = GetTradeSkillTools(i)
+    if v4 then
+        v1 = v1..", "..v2..", "..v3..", "..v4
+    elseif v3 then
+        v1 = v1..", "..v2..", "..v3
+    elseif v2 then
+        v1 = v1..", "..v2
+    elseif v1 then
+        v1 = v1
+    end
+    local linkname = link:match("%|h%[([^%]]+)%]%|h")
+    link = SkilletUtil.SquishLink(link)
+
+    local minmade, maxmade = GetTradeSkillNumMade(i)
+
+    local newstr
+    if linkname == skillname then
+        newstr = ";"..link..";"..difficultyr[skilltype].. maxmade ..";"..(v1 or "")..";"
+    else
+        newstr = skillname..";"..link..";"..difficultyr[skilltype].. maxmade .. ";"..(v1 or "")..";"
+    end
+    for j=1,GetTradeSkillNumReagents(i) do
+        local _, _, rcount, _ = GetTradeSkillReagentInfo(i,j)
+        local reagent_link = GetTradeSkillReagentItemLink(i,j)
+        if not reagent_link then
+            return false, true
+        else
+            reagent_link = SkilletUtil.SquishLink(reagent_link)
+            newstr = newstr..rcount..";"..reagent_link..";"
+        end
+    end
+
+    self.data[prof][i] = newstr
+    return true, false
+end
+
+-- Scans a range of Blizzard tradeskill indices. Returns shred, recipes_scanned.
+function SkilletStitch:ScanIndexRange(prof, start_index, end_index)
     if prof == "UNKNOWN" then
         self.data[prof] = nil
+        return false, 0
     end
     if not self.data[prof] then
         self.data[prof] = {}
     end
 
     cache[prof] = nil
+
     local shred = false
-    for i=1,GetNumTradeSkills() do
+    local recipes_scanned = 0
+
+    for i = start_index, end_index do
         local skillname, skilltype = GetTradeSkillInfo(i)
-        if skilltype~="header" and skillname then
-            local newstr
-            local link = GetTradeSkillItemLink(i)
-            if not link then
+        if skilltype ~= "header" and skillname then
+            local scanned, recipe_shred = scan_recipe_index(self, prof, i)
+            if recipe_shred then
                 shred = true
-            else
-                local v1, _, v2, _, v3, _, v4 = GetTradeSkillTools(i)
-                if v4 then
-                    v1 = v1..", "..v2..", "..v3..", "..v4
-                elseif v3 then
-                    v1 = v1..", "..v2..", "..v3
-                elseif v2 then
-                    v1 = v1..", "..v2
-                elseif v1 then
-                    v1 = v1
-                end
-                local linkname = link:match("%|h%[([^%]]+)%]%|h")
-                link = SkilletUtil.SquishLink(link)
-
-                local minmade, maxmade = GetTradeSkillNumMade(i)
-
-                if linkname == skillname then
-                    newstr = ";"..link..";"..difficultyr[skilltype].. maxmade ..";"..(v1 or "")..";"
-                else
-                    newstr = skillname..";"..link..";"..difficultyr[skilltype].. maxmade .. ";"..(v1 or "")..";"
-                end
-                for j=1,GetTradeSkillNumReagents(i) do
-                    local _, _, rcount, _ = GetTradeSkillReagentInfo(i,j)
-                    local link = GetTradeSkillReagentItemLink(i,j)
-                    if not link then
-                        shred = true
-                    else
-                        link = SkilletUtil.SquishLink(link)
-                        newstr = newstr..rcount..";"..link..";"
-                    end
-                end
+                break
+            elseif scanned then
+                recipes_scanned = recipes_scanned + 1
             end
-            self.data[prof][i] = newstr
         else
             self.data[prof][i] = nil
         end
     end
+
     if shred then
         for k,v in pairs(self.data[prof]) do
             self.data[prof][k] = nil
         end
-        if not AceEvent:IsEventScheduled("SkilletStitch_AutoRescan") then
-            AceEvent:ScheduleEvent("SkilletStitch_AutoRescan", self.SkilletStitch_AutoRescan, 3,self)
-        end
-    else
-        AceEvent:TriggerEvent("SkilletStitch_Scan_Complete", prof)
     end
 
+    return shred, recipes_scanned
+end
+
+function SkilletStitch:ScanTrade()
+    if Skillet and Skillet.ProcessScanChunk then
+        Skillet:ProcessScanChunk()
+    end
 end
 
 -- @function         SetAltCharacterItemLookupFunction

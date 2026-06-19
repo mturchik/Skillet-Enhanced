@@ -156,8 +156,8 @@ local function bankitems_GetItemCount(itemid)
             if type(bankPlayer) == "table" and realm == playerrealm then
                 for num = 1, 28 do
                     if bankPlayer[num] then
-                        local id = select(3, string.find(bankPlayer[num].link, "|Hitem:(%d+):"))
-						if tonumber(id) == itemid then
+                        local id = SkilletUtil.GetItemIDFromLink(bankPlayer[num].link)
+						if id == itemid then
                             count = count + (bankPlayer[num].count or 1)
                         end
                     end
@@ -171,8 +171,8 @@ local function bankitems_GetItemCount(itemid)
                         end
                         for bagItem = 1, realSize do
                             if theBag[bagItem] then
-                                local id = select(3, string.find(theBag[bagItem].link, "|Hitem:(%d+):"))
-								if tonumber(id) == itemid then
+                                local id = SkilletUtil.GetItemIDFromLink(theBag[bagItem].link)
+								if id == itemid then
                                     count = count + (theBag[bagItem].count or 1)
                                 end
                             end

@@ -33,6 +33,10 @@ Run this checklist after any change to UI, events, queue processing, or tradeski
 - [ ] **21. Open scan once** — Open a profession; only one "Scanning tradeskill" message appears before the list populates
 - [ ] **22. Hide uncraftable performance** — On a large profession (e.g. Engineering), toggle **Hide uncraftable**; list filters without a long freeze
 - [ ] **23. Bank/alt counts** — Enable bank/alt counts in options; deposit a reagent to the bank and confirm visible `[bags/bank/alts]` brackets update correctly
+- [ ] **24. Switch profession mid-scan** — Open Engineering (stale cache) and wait for scan progress; switch to Blacksmith before scan finishes; Blacksmith scan starts, progress text updates, and the recipe list populates
+- [ ] **25. Close and reopen mid-scan** — Open a profession with stale cache; close the tradeskill window while progress is below 100%; reopen the same profession; scan resumes from partial cache and completes
+- [ ] **26. Scan progress percentage** — On a large profession (e.g. Engineering), confirm the title bar shows increasing `Skillet: <profession> (Scanning: n/total, pct%)` while scanning
+- [ ] **27. No list flicker during scan** — Open a profession with stale cache (e.g. Tailoring); while the title progress updates, the recipe list must not flash or repaint repeatedly; after scan completes, the list populates in one refresh. Reopen with fresh cache — no scan, no flash
 
 ## Automated Tests (off-client)
 

@@ -53,7 +53,7 @@ Skillet stores compressed recipe strings per profession in SavedVariables via **
 
 - Walk indices `1 .. GetNumTradeSkills()`.
 - Skip rows where `GetTradeSkillInfo(i)` returns `skillType == "header"`.
-- For every other index, require `stitch.data[trade][i]` to exist.
+- For every other index, require `stitch.data[trade][i]` to exist **and** its cached result item id to match `GetTradeSkillItemLink(i)` (indices can shift when recipes are learned; a non-nil but wrong cache entry is stale).
 - Empty Blizzard list → not stale (nothing to scan).
 
 **Scan trigger matrix (after):**
@@ -273,4 +273,43 @@ Expect **37 tests, 0 failures** — includes cache staleness, queue remap, inven
 
 ---
 
-*Document version: reflects working tree changes through scan deduplication, refresh tiering, learn-recipe remapping, and inventory snapshot batching.*
+## Part 8 — Chunked scan sessions (initial scan UX)
+
+**Problem addressed:** Global `scan_in_progress` blocked scans for other professions; synchronous `ScanTrade()` froze the UI with a static `"Scanning tradeskill ..."` message; incomplete link retries (`shred`) could leave scan state stuck.
+
+**After:**
+
+| Concern | Behavior |
+|---------|----------|
+| Progress | `ScanTradeChunk()` processes ~30 Blizzard rows per frame; `SkilletFrameScanningText` shows `Scanning %s — %d/%d (%d%%)` |
+| Session scope | One active session per profession (`scan_session.profession`); switching professions cancels the old session and starts a new one if stale |
+| Close / reopen | `CancelScanSession()` on window close; partial cache remains; reopen resumes from first stale index via `FindFirstStaleRecipeIndex` |
+| Shred retry | `ScanSessionShredded()` clears session before scheduling `AutoRescan`; retry no longer deadlocks on stale `scan_in_progress` |
+| Dedup | Stitch skips scan when `IsScanInProgress(current_profession)` or cache is fresh; Skillet `cache_recipes_if_needed` remains primary initiator on trade change |
+
+**Files:** `Skillet.lua` (session lifecycle), `SkilletStitch-1.1.lua` (chunked scan), `SkilletUtil.lua` (resume/progress helpers), `tests/test_cache.lua`.
+
+Part 5 invariants still apply: bag/scroll events never trigger recipe scan; complete SavedVariables skip scan until stale.
+
+---
+
+## Part 9 — Scan-time UI (anti-flicker)
+
+While a scan session is active for the **current** profession, the recipe list is **frozen**. Only the title bar shows throttled progress (`Skillet: %s (Scanning: n / total, pct%)`).
+
+| Event / action | During active scan (current profession) |
+|----------------|----------------------------------------|
+| `ProcessScanChunk` | Increment `recipe_done`; throttled `UpdateWindowTitle` (250 ms or integer % change) |
+| `TRADE_SKILL_UPDATE` | **Title only** via `UpdateScanProgressUI`; no list resort or repaint |
+| `internal_RefreshRecipeList` / `internal_UpdateTradeSkillWindow` | Early return; title only if scan active |
+| `ScanCompleted` / `FinishScanSession` | Reconcile `recipe_done`, then **one** full refresh (queue remap, selection, resort, list paint) |
+
+**Why:** Blizzard fires `TRADE_SKILL_UPDATE` when scan reads `GetTradeSkillInfo` / reagent APIs. Repainting the list on each event caused visible flicker (partial cache + `ResortRecipes` every frame).
+
+**Scan driver:** 50 ms between chunks (was 10 ms) to reduce overlap with Blizzard events while keeping total scan time under ~1 s for large professions.
+
+**Files:** `Skillet.lua` (`UpdateScanProgressUI`, `TRADE_SKILL_UPDATE` gate), `UI/MainFrame.lua` (list refresh guards).
+
+---
+
+*Document version: reflects working tree changes through scan deduplication, refresh tiering, learn-recipe remapping, inventory snapshot batching, chunked scan sessions, and scan-time UI freeze.*

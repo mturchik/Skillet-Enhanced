@@ -127,9 +127,54 @@ function SkilletUtil.MapSortedRecipeIndex(index, sorted_recipes, sort_desc)
     return sorted_recipes[lookup]
 end
 
--- Returns true when any non-header Blizzard recipe index lacks cached data.
+-- Extracts the crafted item/enchant id from a squished Stitch cache string.
+function SkilletUtil.GetRecipeResultIdFromCacheString(cached_string)
+    if not cached_string then
+        return nil
+    end
+
+    local squished_link = cached_string:match("^[^;]*;([^;]+);")
+    if not squished_link or squished_link == "" then
+        return nil
+    end
+
+    local full_link = SkilletUtil.UnsquishLink(squished_link)
+    return SkilletUtil.GetItemIDFromLink(full_link)
+end
+
+-- True when cached recipe data does not match the live tradeskill result link at this index.
+function SkilletUtil.IsCachedRecipeStringStale(cached_string, live_item_link)
+    if not cached_string then
+        return true
+    end
+    if not live_item_link then
+        return false
+    end
+
+    local cached_id = SkilletUtil.GetRecipeResultIdFromCacheString(cached_string)
+    local live_id = SkilletUtil.GetItemIDFromLink(live_item_link)
+    if not cached_id or not live_id then
+        return cached_id ~= live_id
+    end
+
+    return cached_id ~= live_id
+end
+
+local function is_recipe_index_stale(i, cached, live_item_links_at)
+    if not cached or not cached[i] then
+        return true
+    end
+    if live_item_links_at and SkilletUtil.IsCachedRecipeStringStale(cached[i], live_item_links_at[i]) then
+        return true
+    end
+    return false
+end
+
+-- Returns true when any non-header Blizzard recipe index lacks cached data
+-- or cached data does not match the live result link at that index.
 -- blizz_count includes header rows; cached is indexed by recipe position only.
-function SkilletUtil.IsRecipeIndexCacheStale(blizz_count, is_header_at, cached)
+-- live_item_links_at[i] is optional; when provided, result item ids are compared.
+function SkilletUtil.IsRecipeIndexCacheStale(blizz_count, is_header_at, cached, live_item_links_at)
     if not blizz_count or blizz_count <= 0 then
         return false
     end
@@ -138,16 +183,76 @@ function SkilletUtil.IsRecipeIndexCacheStale(blizz_count, is_header_at, cached)
     end
 
     for i = 1, blizz_count, 1 do
-        if not is_header_at[i] then
-            if not cached[i] then
-                return true
-            end
+        if not is_header_at[i] and is_recipe_index_stale(i, cached, live_item_links_at) then
+            return true
         end
     end
 
     return false
 end
-function SkilletUtil.FindRecipeIndexByDataString(recipes_by_index, target)
+
+-- Returns the first non-header Blizzard index missing or mismatched cached data, or nil if complete.
+function SkilletUtil.FindFirstStaleRecipeIndex(blizz_count, is_header_at, cached, live_item_links_at)
+    if not blizz_count or blizz_count <= 0 then
+        return nil
+    end
+
+    for i = 1, blizz_count, 1 do
+        if not is_header_at[i] and is_recipe_index_stale(i, cached, live_item_links_at) then
+            return i
+        end
+    end
+
+    return nil
+end
+
+-- Counts non-header recipe rows in the live Blizzard tradeskill list.
+function SkilletUtil.CountNonHeaderRecipes(blizz_count, is_header_at)
+    if not blizz_count or blizz_count <= 0 then
+        return 0
+    end
+
+    local count = 0
+    for i = 1, blizz_count, 1 do
+        if not is_header_at[i] then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+-- Counts non-header recipe rows that already have cached data.
+function SkilletUtil.CountCachedRecipes(blizz_count, is_header_at, cached)
+    if not blizz_count or blizz_count <= 0 or not cached then
+        return 0
+    end
+
+    local count = 0
+    for i = 1, blizz_count, 1 do
+        if not is_header_at[i] and cached[i] then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+function SkilletUtil.ComputeScanPercent(done, total)
+    if not total or total <= 0 then
+        return 0
+    end
+
+    return math.floor(done / total * 100)
+end
+
+-- Human-readable scan progress for tests and fallback display.
+function SkilletUtil.FormatScanProgress(profession, done, total)
+    local pct = SkilletUtil.ComputeScanPercent(done, total)
+    return profession .. " — " .. done .. "/" .. total .. " (" .. pct .. "%)"
+end
+
+function SkilletUtil.FindRecipeIndexByDataString(recipes_by_index, target, decode_recipe)
     if not recipes_by_index or not target then
         return nil
     end
@@ -158,7 +263,41 @@ function SkilletUtil.FindRecipeIndexByDataString(recipes_by_index, target)
         end
     end
 
+    if decode_recipe then
+        local decoded = decode_recipe(target)
+        if decoded and decoded.link then
+            for index, recipe_string in pairs(recipes_by_index) do
+                if type(index) == "number" and recipe_string then
+                    local candidate = decode_recipe(recipe_string)
+                    if candidate and candidate.link == decoded.link then
+                        return index
+                    end
+                end
+            end
+        end
+    end
+
     return nil
+end
+
+-- Builds header flags and live result links for Blizzard tradeskill indices.
+function SkilletUtil.BuildTradeSkillHeaderMaps(blizz_count)
+    local is_header = {}
+    local live_links = {}
+
+    if not blizz_count or blizz_count <= 0 then
+        return is_header, live_links
+    end
+
+    for i = 1, blizz_count, 1 do
+        local _, skillType = GetTradeSkillInfo(i)
+        is_header[i] = (skillType == "header")
+        if not is_header[i] then
+            live_links[i] = GetTradeSkillItemLink(i)
+        end
+    end
+
+    return is_header, live_links
 end
 
 -- Finds the Blizzard tradeskill index for an item id after indices shift.

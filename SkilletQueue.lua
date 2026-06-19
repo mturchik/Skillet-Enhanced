@@ -119,24 +119,12 @@ function Skillet:RemapQueueAfterRescan(tradeskill)
     end
 
     local changed = false
+    local decode_recipe = function(recipe_string)
+        return stitch:DecodeRecipe(recipe_string)
+    end
     for _, entry in ipairs(stitch.queue) do
         if entry.profession == tradeskill and entry.recipe then
-            local new_index = SkilletUtil.FindRecipeIndexByDataString(data, entry.recipe)
-
-            if not new_index then
-                local decoded = stitch:DecodeRecipe(entry.recipe)
-                if decoded and decoded.link then
-                    for index, recipe_string in pairs(data) do
-                        if type(index) == "number" and recipe_string then
-                            local candidate = stitch:DecodeRecipe(recipe_string)
-                            if candidate and candidate.link == decoded.link then
-                                new_index = index
-                                break
-                            end
-                        end
-                    end
-                end
-            end
+            local new_index = SkilletUtil.FindRecipeIndexByDataString(data, entry.recipe, decode_recipe)
 
             if new_index then
                 if new_index ~= entry.index then

@@ -134,14 +134,9 @@ function Skillet:IsRecipeCacheStale(trade)
     end
 
     local cached = self.stitch.data[trade]
-    local is_header = {}
+    local is_header, live_links = SkilletUtil.BuildTradeSkillHeaderMaps(blizz_count)
 
-    for i = 1, blizz_count, 1 do
-        local _, skillType = GetTradeSkillInfo(i)
-        is_header[i] = (skillType == "header")
-    end
-
-    return SkilletUtil.IsRecipeIndexCacheStale(blizz_count, is_header, cached)
+    return SkilletUtil.IsRecipeIndexCacheStale(blizz_count, is_header, cached, live_links)
 end
 
 -- =====================================================================

@@ -10,7 +10,7 @@ A comprehensive reference for the **Skillet-Enhanced** World of Warcraft addon a
 |---|---|
 | **Name** | Skillet-Enhanced |
 | **Version** | 1.14 (fork; upstream Skillet 1.13 / r167) |
-| **Author** | Mark (fork); original Skillet by Robert Clark (nogudnik@gmail.com) |
+| **Author** | Mark Turchik (fork); original Skillet by Robert Clark (nogudnik@gmail.com) |
 | **License** | GPL v3 or later |
 | **Framework** | Ace2 (AceAddon, AceEvent, AceDB, AceConsole, AceHook, AceLocale) |
 | **Saved Variables** | `SkilletDB` (global), `SkilletDBPC` (per-character) |

@@ -132,10 +132,11 @@ function Skillet:CreateTradeSkillWindow()
     title:SetPoint("TOPLEFT",titlebar,"TOPLEFT",0,0)
     title:SetPoint("BOTTOMRIGHT",titlebar2,"BOTTOMRIGHT",0,0)
 
-    local titletext = title:CreateFontString("SkilletTitleText", "OVERLAY", "GameFontNormalLarge")
-    titletext:SetPoint("TOPLEFT",title,"TOPLEFT",0,0)
-    titletext:SetPoint("TOPRIGHT",title,"TOPRIGHT",0,0)
-    titletext:SetHeight(26)
+    local titletext = title:CreateFontString("SkilletTitleText", "OVERLAY", "GameFontNormal")
+    titletext:SetPoint("TOPLEFT", title, "TOPLEFT", 8, -2)
+    titletext:SetPoint("RIGHT", frame, "RIGHT", -80, 0)
+    titletext:SetHeight(22)
+    titletext:SetJustifyH("LEFT")
     titletext:SetShadowColor(0,0,0)
     titletext:SetShadowOffset(1,-1)
     titletext:SetTextColor(1,1,1)
@@ -299,20 +300,42 @@ end
 -- reference there resolves as a (nil) global and fails at runtime.
 local num_recipe_buttons = 0
 local craftable_count_cache = nil
+local skill_type_cache = nil
 
 -- Figures out whether or not the section a recipe
 -- is in has been hidden (collapsed or filtered).
--- Headers are, by definition never hidden.
+-- Headers are hidden when every recipe in the section is hidden,
+-- unless the section is collapsed (header stays visible so it can expand).
 -- skip_uncraftable: true while building inventory snapshots (before craftable cache exists).
-local function is_hidden_skill(parent, skill_index, skip_uncraftable)
+local is_hidden_skill
+
+local function is_header_hidden(parent, header_index)
+    local skillName, _ = parent:GetTradeSkillInfo(header_index)
+    if parent.headerCollapsedState and parent.headerCollapsedState[skillName] then
+        return false
+    end
+
+    local numTradeSkills = parent:GetNumTradeSkills()
+    for i = header_index + 1, numTradeSkills, 1 do
+        if parent.stitch:GetItemDataByIndex(parent.currentTrade, i) == nil then
+            break
+        end
+        if not is_hidden_skill(parent, i) then
+            return false
+        end
+    end
+
+    return true
+end
+
+is_hidden_skill = function(parent, skill_index, skip_uncraftable)
 
     -- look up the info in stitch to avoid spamming the server with
     -- GetTradeSkillInfo() calls. It does not seem to like that
     local s = Skillet.stitch:GetItemDataByIndex(parent.currentTrade, skill_index)
 
     if not s then
-        -- it's a header, headers are not skills and can never be hidden
-        return false
+        return is_header_hidden(parent, skill_index)
     end
 
     -- it's a recipe, is it filtered out?
@@ -351,12 +374,35 @@ local function is_hidden_skill(parent, skill_index, skip_uncraftable)
     end
 
     -- are we hiding anything that is trivial (has no chance of giving a skill point)
-    if s.difficulty == "trivial" and parent:GetTradeSkillOption(parent.currentTrade, "hidetrivial") then
-        return true
+    -- Difficulty changes with skill level but is only stored in the stitch cache during
+    -- a full recipe scan, so use live GetTradeSkillInfo (batched in skill_type_cache).
+    if parent:GetTradeSkillOption(parent.currentTrade, "hidetrivial") then
+        local skillType = skill_type_cache and skill_type_cache[skill_index]
+        if not skillType then
+            _, skillType = parent:GetTradeSkillInfo(skill_index)
+        end
+        if skillType == "trivial" then
+            return true
+        end
     end
 
     return false
 
+end
+
+-- Blizzard/sorted list positions mapped to indices of rows shown in the scroll list.
+local function build_visible_skill_list(self, skip_uncraftable)
+    local visible = {}
+    local numTradeSkills = self:GetNumTradeSkills()
+
+    for skillIndex = 1, numTradeSkills, 1 do
+        local mapped_index = self:GetSortedRecipeIndex(skillIndex)
+        if mapped_index and not is_hidden_skill(self, mapped_index, skip_uncraftable) then
+            table.insert(visible, mapped_index)
+        end
+    end
+
+    return visible
 end
 
 -- Collects reagent links needed for an inventory snapshot on this refresh.
@@ -371,22 +417,14 @@ local function collect_snapshot_links(self)
         end
     end
 
-    local numTradeSkills = self:GetNumTradeSkills()
     local button_count = math.floor(SkilletSkillList:GetHeight() / SKILLET_TRADE_SKILL_HEIGHT)
     local skillOffset = FauxScrollFrame_GetOffset(SkilletSkillList)
+    local visible = build_visible_skill_list(self, true)
 
     for i = 1, button_count, 1 do
-        local skillIndex = i + skillOffset
-        while skillIndex <= numTradeSkills do
-            local mapped_index = self:GetSortedRecipeIndex(skillIndex)
-            if mapped_index and not is_hidden_skill(self, mapped_index, true) then
-                break
-            end
-            skillOffset = skillOffset + 1
-            skillIndex = i + skillOffset
-        end
-        if skillIndex <= numTradeSkills then
-            skillIndex = self:GetSortedRecipeIndex(skillIndex)
+        local visibleIndex = i + skillOffset
+        if visibleIndex <= #visible then
+            local skillIndex = visible[visibleIndex]
             local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
             if s then
                 SkilletUtil.AddReagentLinksFromRecipe(links, s, max_reagents)
@@ -395,6 +433,7 @@ local function collect_snapshot_links(self)
     end
 
     if self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
+        local numTradeSkills = self:GetNumTradeSkills()
         for skillIndex = 1, numTradeSkills, 1 do
             local _, skillType = self:GetTradeSkillInfo(skillIndex)
             if skillType and skillType ~= "header" then
@@ -431,6 +470,21 @@ local function build_craftable_count_cache(self)
     end
 end
 
+local function build_skill_type_cache(self)
+    skill_type_cache = {}
+    if not self:GetTradeSkillOption(self.currentTrade, "hidetrivial") then
+        return
+    end
+
+    local numTradeSkills = self:GetNumTradeSkills()
+    for skillIndex = 1, numTradeSkills, 1 do
+        local _, skillType = self:GetTradeSkillInfo(skillIndex)
+        if skillType and skillType ~= "header" then
+            skill_type_cache[skillIndex] = skillType
+        end
+    end
+end
+
 local function prepare_inventory_snapshot(self)
     local links = collect_snapshot_links(self)
     self.stitch:BuildInventorySnapshot(links)
@@ -439,6 +493,7 @@ end
 local function clear_inventory_snapshot(self)
     self.stitch:ClearInventorySnapshot()
     craftable_count_cache = nil
+    skill_type_cache = nil
 end
 local function get_recipe_button(i)
     local button = getglobal("SkilletScrollButton"..i)
@@ -499,14 +554,16 @@ end
 -- Paints visible recipe scroll buttons. syncSelection: SelectTradeSkill for ArmorCraft.
 -- updateCounts: paint [bags/bank/alts] brackets (requires reserved reagents already set).
 local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
-    local numTradeSkills = self:GetNumTradeSkills()
     self:ResortRecipes()
+
+    local visible = build_visible_skill_list(self)
+    local visible_count = #visible
 
     local button_count = SkilletSkillList:GetHeight() / SKILLET_TRADE_SKILL_HEIGHT
     button_count = math.floor(button_count)
 
     FauxScrollFrame_Update(SkilletSkillList,
-                           numTradeSkills,
+                           visible_count,
                            button_count,
                            SKILLET_TRADE_SKILL_HEIGHT)
 
@@ -522,21 +579,12 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
     for i = 1, button_count, 1 do
         num_recipe_buttons = math.max(num_recipe_buttons, i)
 
-        local skillIndex = i + skillOffset
+        local visibleIndex = i + skillOffset
         local button = get_recipe_button(i)
         button:SetWidth(width)
 
-        while (skillIndex <= numTradeSkills) do
-            local mapped_index = self:GetSortedRecipeIndex(skillIndex)
-            if mapped_index and not is_hidden_skill(self, mapped_index) then
-                break
-            end
-            skillOffset = skillOffset + 1
-            skillIndex = i + skillOffset
-        end
-
-        if (skillIndex <= numTradeSkills) then
-            skillIndex = self:GetSortedRecipeIndex(skillIndex)
+        if visibleIndex <= visible_count then
+            local skillIndex = visible[visibleIndex]
 
             local skillName, skillType = self:GetTradeSkillInfo(skillIndex)
             if not skillName then
@@ -674,7 +722,7 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
                 show_button(button, self.currentTrade, skillIndex, i)
             end
         else
-            hide_button(button, self.currentTrade, skillIndex, i)
+            hide_button(button, self.currentTrade, 0, i)
             button:UnlockHighlight()
         end
     end
@@ -729,10 +777,7 @@ function Skillet:internal_RefreshWindowChrome()
     SkilletHideUncraftableRecipes:SetChecked(self:GetTradeSkillOption(self.currentTrade, "hideuncraftable"))
 
     local _, rank, maxRank = self:GetTradeSkillLine()
-    local title = getglobal("SkilletTitleText")
-    if title then
-        title:SetText(L["Skillet Trade Skills"] .. ": " .. self.currentTrade)
-    end
+    self:UpdateWindowTitle()
 
     SkilletRankFrame:SetMinMaxValues(0, maxRank)
     SkilletRankFrame:SetValue(rank)
@@ -745,21 +790,25 @@ function Skillet:internal_RefreshRecipeList(syncSelection)
         return
     end
 
-    paint_recipe_scroll_list(self, syncSelection, true)
-end
-
-function Skillet:internal_RefreshInventoryCounts()
-    if not self.currentTrade or self.currentTrade == "UNKNOWN" then
+    if self:IsScanInProgress(self.currentTrade) then
+        self:UpdateWindowTitle()
         return
     end
 
+    build_skill_type_cache(self)
+    paint_recipe_scroll_list(self, syncSelection, true)
+    skill_type_cache = nil
+end
+
+local function refresh_inventory_and_recipe_list(self, resort_if_hide_uncraftable)
     prepare_inventory_snapshot(self)
 
     local queued_reagents = self:GetReagentsForQueuedRecipes(UnitName("player"))
     self.stitch:SetReservedReagentsList(queued_reagents)
     build_craftable_count_cache(self)
+    build_skill_type_cache(self)
 
-    if self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
+    if resort_if_hide_uncraftable and self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
         self:ResortRecipes(true)
     end
 
@@ -773,6 +822,14 @@ function Skillet:internal_RefreshInventoryCounts()
     clear_inventory_snapshot(self)
 end
 
+function Skillet:internal_RefreshInventoryCounts()
+    if not self.currentTrade or self.currentTrade == "UNKNOWN" then
+        return
+    end
+
+    refresh_inventory_and_recipe_list(self, true)
+end
+
 -- Updates the trade skill window whenever anything has changed,
 -- number of skills, skill type, skill level, etc
 function Skillet:internal_UpdateTradeSkillWindow()
@@ -781,22 +838,13 @@ function Skillet:internal_UpdateTradeSkillWindow()
         return
     end
 
-    self:internal_RefreshWindowChrome()
-
-    prepare_inventory_snapshot(self)
-
-    local queued_reagents = self:GetReagentsForQueuedRecipes(UnitName("player"))
-    self.stitch:SetReservedReagentsList(queued_reagents)
-    build_craftable_count_cache(self)
-
-    paint_recipe_scroll_list(self, true, true)
-
-    if self.selectedSkill then
-        self:UpdateDetailsWindow(self.selectedSkill)
+    if self:IsScanInProgress(self.currentTrade) then
+        self:UpdateWindowTitle()
+        return
     end
 
-    self:UpdateQueueWindow()
-    clear_inventory_snapshot(self)
+    self:internal_RefreshWindowChrome()
+    refresh_inventory_and_recipe_list(self, false)
 end
 
 -- Display an action packed tooltip when we are over
@@ -1307,18 +1355,42 @@ function Skillet:StartQueue_OnClick(button)
     end
 end
 
--- Updates the "Scanning tradeskill" text area with provided text
--- Set nil/empty text to hide the area
-function Skillet:UpdateScanningText(text)
-    local area = getglobal("SkilletFrameScanningText")
-    if area then
-        if text and string.len(text) > 0 then
-            area:SetText(text)
-            area:Show()
-        else
-            area:Hide()
-        end
+-- Updates the title bar text, including scan progress when a scan is active.
+function Skillet:UpdateWindowTitle()
+    local title = getglobal("SkilletTitleText")
+    if not title then
+        return
     end
+
+    local trade = self.currentTrade
+    if not trade or trade == "UNKNOWN" then
+        title:SetText(L["Skillet Trade Skills"])
+        return
+    end
+
+    local session = self.GetScanSession and self:GetScanSession()
+    if session and session.profession == trade and not session.pending then
+        local pct = SkilletUtil.ComputeScanPercent(session.recipe_done, session.recipe_total)
+        title:SetText(string.format(
+            L["Window title scanning"],
+            trade,
+            session.recipe_done,
+            session.recipe_total,
+            pct
+        ))
+    else
+        title:SetText(string.format(L["Window title"], trade))
+    end
+
+    local scanning = getglobal("SkilletFrameScanningText")
+    if scanning then
+        scanning:Hide()
+    end
+end
+
+-- Legacy hook; scan progress is shown in the title bar via UpdateWindowTitle.
+function Skillet:UpdateScanningText(text)
+    self:UpdateWindowTitle()
 end
 
 local old_CloseSpecialWindows

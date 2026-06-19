@@ -39,7 +39,7 @@ Skillet-Enhanced is a community fork of [Skillet](https://www.wowace.com/project
 | Skillet (original) | Robert Clark (nogudnik) |
 | ATSW (inspiration) | Slartie |
 | Stitch / recipe cache | Nymbia |
-| Skillet-Enhanced fork | Mark |
+| Skillet-Enhanced fork | Mark Turchik |
 
 Licensed under **GPL v3 or later** — see [LICENSE.txt](LICENSE.txt).
 

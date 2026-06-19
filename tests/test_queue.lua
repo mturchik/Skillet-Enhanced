@@ -66,3 +66,21 @@ function TestQueue:test_findRecipeIndexByItemId()
     lu.assertEquals(1, SkilletUtil.FindRecipeIndexByItemId(ids, 2842))
     lu.assertNil(SkilletUtil.FindRecipeIndexByItemId(ids, 9999))
 end
+
+function TestQueue:test_findRecipeIndexByResultLinkFallback()
+    local function decode(recipe_string)
+        local link = recipe_string:match("^[^;]*;([^;]+);")
+        if link then
+            return { link = link }
+        end
+    end
+
+    local old_entry = "Bronze;2841|link;o1;;"
+    local data = {
+        [2] = "Bronze Framework;2841|link;o1;;",
+        [4] = "Gold;2840|link;o1;;",
+    }
+
+    lu.assertNil(SkilletUtil.FindRecipeIndexByDataString(data, old_entry))
+    lu.assertEquals(2, SkilletUtil.FindRecipeIndexByDataString(data, old_entry, decode))
+end

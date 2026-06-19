@@ -3,8 +3,8 @@
 ## Notes: Enhanced tradeskill window (fork of Skillet for WotLK 3.3.5a)
 ## Notes-esES: Una sustitucion de la ventana de Habilidades de Comercio
 ## Notes-ruRU: Заменяет окно профессий на более функциональное.
-## Author: Mark
-## Version: 1.14
+## Author: Mark Turchik
+## Version: 1.14.1
 ## X-Category: Tradeskill
 ## X-License: GPL v3 or later
 ## X-Credits: Fork of Skillet by Robert Clark (nogudnik); Slartie (ATSW); Nymbia (Stitch)
