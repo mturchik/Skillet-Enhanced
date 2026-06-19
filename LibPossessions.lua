@@ -60,6 +60,9 @@ end
 -- for which Sanity2 has data.
 local function sanity_GetItemCount(item)
     local name = GetItemInfo(item)
+    if not name then
+        return 0
+    end
 
     local owners = Sanity:GetOwnersFor(name)
     if not owners then return 0 end
@@ -87,6 +90,10 @@ end
 -- for which Bagnon_Forever has data.
 local function bagnondb_GetItemCount(item)
     local itemLink = select(2, GetItemInfo(item))
+    if not itemLink then
+        return 0
+    end
+
     local count = 0
     for playerName in BagnonDB:GetPlayers() do
         -- NB: We skip the current player. That info is dynamnic and should
@@ -525,8 +532,10 @@ function LibPossessions:GetItemCount(item)
                 alt_count = 0
             else
                 alt_count = tonumber(count)
-                cache[item] = alt_count
-                cache.n = cache.n + 1
+                if select(2, GetItemInfo(item)) then
+                    cache[item] = alt_count
+                    cache.n = cache.n + 1
+                end
             end
         end
     else

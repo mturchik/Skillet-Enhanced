@@ -835,16 +835,45 @@ end
 function Skillet:SetTradeSkillToolTip(skill, index)
     GameTooltip:ClearLines();
 
+    if not skill or skill < 1 or skill > self:GetNumTradeSkills() then
+        return
+    end
+
+    local _, skillType = self:GetTradeSkillInfo(skill)
+    if skillType == "header" then
+        return
+    end
+
+    local ok = false
     if index then
-        GameTooltip:SetTradeSkillItem(skill, index)
+        if index < 1 or index > GetTradeSkillNumReagents(skill) then
+            ok = false
+        else
+            local reagentName = GetTradeSkillReagentInfo(skill, index)
+            if reagentName then
+                ok = pcall(GameTooltip.SetTradeSkillItem, GameTooltip, skill, index)
+            end
+        end
+        if not ok then
+            local link = self:GetTradeSkillReagentItemLink(skill, index)
+            if link then
+                GameTooltip:SetHyperlink(link)
+            end
+        end
     else
-        GameTooltip:SetTradeSkillItem(skill)
+        ok = pcall(GameTooltip.SetTradeSkillItem, GameTooltip, skill)
+        if not ok then
+            local link = self:GetTradeskillItemLink(skill)
+            if link then
+                GameTooltip:SetHyperlink(link)
+            end
+        end
     end
 
     local s = self.stitch:GetItemDataByIndex(self.currentTrade, skill);
 
     -- Can the item be obtained from a vendor? Let the user know!
-    if s and index and s[index].vendor == true then
+    if s and index and s[index] and s[index].vendor == true then
         GameTooltip:AppendText(GRAY_FONT_COLOR_CODE .. " (" .. L["buyable"] .. ")" .. FONT_COLOR_CODE_CLOSE);
     end
 

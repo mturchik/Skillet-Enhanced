@@ -10,21 +10,21 @@ Run this checklist after any change to UI, events, queue processing, or tradeski
 
 ## Checklist
 
-- [ ] **1. Window replacement** — Open each profession window; Skillet replaces the default Blizzard tradeskill UI
-- [ ] **2. Recipe filter** — Filter by recipe name; confirm list narrows correctly
-- [ ] **3. Reagent filter** — Filter by a reagent name (not the recipe name); confirm matching recipes appear
-- [ ] **4. Sorting** — Sort by name, difficulty, item level, and quality; toggle reverse sort; confirm order changes
-- [ ] **5. Recipe tooltip** — Hover a recipe in the list; tooltip shows without Lua errors
-- [ ] **6. Reagent tooltip** — Hover each reagent slot for a selected recipe; no `SetTradeSkillItem` errors (see `exampleError.txt`)
-- [ ] **7. Reverse navigation** — Click a craftable reagent; Skillet navigates to that reagent's recipe
-- [ ] **8. Queue items** — Queue two different recipes; confirm both appear in the queue panel
-- [ ] **9. Process queue** — Click Start; first queued item begins crafting
-- [ ] **10. Clear queue** — Clear queue; panel empties
-- [ ] **11. Queue persistence** — Queue an item, log out, log back in; queue is restored
-- [ ] **12. Shopping list** — Run `/skillet shoppinglist`; missing materials for queued recipes are listed
-- [ ] **13. Vendor buy** — Visit a vendor selling a needed reagent; Skillet buy button appears and purchases work
-- [ ] **14. Linked tradeskill** — Open a tradeskill link from chat; Skillet does **not** replace the linked view
-- [ ] **15. Options** — Run `/skillet config` out of combat; Waterfall options panel opens
+- [x] **1. Window replacement** — Open each profession window; Skillet replaces the default Blizzard tradeskill UI
+- [x] **2. Recipe filter** — Filter by recipe name; confirm list narrows correctly
+- [x] **3. Reagent filter** — Filter by a reagent name (not the recipe name); confirm matching recipes appear
+- [x] **4. Sorting** — Sort by name, difficulty, item level, and quality; toggle reverse sort; confirm order changes
+- [x] **5. Recipe tooltip** — Hover a recipe in the list; tooltip shows without Lua errors
+- [x] **6. Reagent tooltip** — Hover each reagent slot for a selected recipe; no `SetTradeSkillItem` errors (see `exampleError.txt`)
+- [x] **7. Reverse navigation** — Click a craftable reagent; Skillet navigates to that reagent's recipe
+- [x] **8. Queue items** — Queue two different recipes; confirm both appear in the queue panel
+- [x] **9. Process queue** — Click Start; first queued item begins crafting
+- [x] **10. Clear queue** — Clear queue; panel empties
+- [x] **11. Queue persistence** — Queue an item, log out, log back in; queue is restored
+- [x] **12. Shopping list** — Run `/skillet shoppinglist`; missing materials for queued recipes are listed
+- [x] **13. Vendor buy** — Visit a vendor selling a needed reagent; Skillet buy button appears and purchases work
+- [x] **14. Linked tradeskill** — Open a tradeskill link from chat; Skillet does **not** replace the linked view
+- [x] **15. Options** — Run `/skillet config` out of combat; Waterfall options panel opens
 
 ## Automated Tests (off-client)
 
