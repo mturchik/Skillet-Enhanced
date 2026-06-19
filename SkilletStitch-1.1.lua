@@ -56,37 +56,6 @@ local difficultyr = {
     easy = "e",
     trivial = "t",
 }
-local function squishlink(link)
-    -- in:  |cffffffff|Hitem:13928:0:0:0:0:0:0:0|h[Grilled Squid]|h|r
-    -- out: ffffff|13928|Grilled Squid
-    local color, id, name = link:match("^|cff(......)|Hitem:(%d+):[^:]+:[^:]+:[^:]+:[^:]+:[^:]+:[^:]+:[^:]+:[^:]+|h%[([^%]]+)%]|h|r$")
-    if id then
-        return color.."|"..id.."|"..name
-    else
-        -- in:  |cffffffff|Henchant:7421|h[Runed Copper Rod]|h|r
-        -- out: |-7421|Runed Copper Rod
-        id, name = link:match("^|cffffd000|Henchant:(%d+)|h%[([^%]]+)%]|h|r$")
-        return "|-"..id.."|"..name
-    end
-end
-local function unsquishlink(link)
-    -- in:  ffffff|13928|Grilled Squid
-    -- out: |cffffffff|Hitem:13928:0:0:0:0:0:0:0|h[Grilled Squid]|h|r  ,false
-    local color, id, name = link:match("^([^|].....)|(%d+)|(.+)$")
-    if id then
-        return "|cff"..color.."|Hitem:"..id..":0:0:0:0:0:0:0:0|h["..name.."]|h|r", false
-    else
-        -- in:  |-7421|Runed Copper Rod
-        -- out: |cffffffff|Henchant:7421|h[Runed Copper Rod]|h|r ,true
-        id, name = link:match("^|%-(%d+)|(.+)$")
-        if id then
-            return "|cffffd000|Henchant:"..id.."|h["..name.."]|h|r",true
-        else
-            return link
-        end
-    end
-end
-
 local reserved_reagents = nil
 
 -- Returns the count of reagents of type 'link' that have
@@ -225,7 +194,7 @@ function SkilletStitch:DecodeRecipe(datastring)
     local nameoverride, link, difficultychar, numcrafted, tools = itemchunk:match("^([^;]-);([^;]+);(%a)(%d+);([^;]-);$")
     local isenchant
 
-    link,isenchant = unsquishlink(link)
+    link,isenchant = SkilletUtil.UnsquishLink(link)
     if nameoverride:len() == 0 then
         nameoverride = link:match("%|h%[([^%]]+)%]%|h")
     end
@@ -250,7 +219,7 @@ function SkilletStitch:DecodeRecipe(datastring)
         index = key,
     },itemmeta)
     for reagentnum, reagentlink in reagentchunk:gmatch("([^;]+);([^;]+);") do
-        reagentlink = unsquishlink(reagentlink)
+        reagentlink = SkilletUtil.UnsquishLink(reagentlink)
         local texture = select(10, GetItemInfo(reagentlink))
         local vendor = false
         if PT then
@@ -610,7 +579,7 @@ function SkilletStitch:ScanTrade()
                     v1 = v1
                 end
                 local linkname = link:match("%|h%[([^%]]+)%]%|h")
-                link = squishlink(link)
+                link = SkilletUtil.SquishLink(link)
 
                 local minmade, maxmade = GetTradeSkillNumMade(i)
 
@@ -625,7 +594,7 @@ function SkilletStitch:ScanTrade()
                     if not link then
                         shred = true
                     else
-                        link = squishlink(link)
+                        link = SkilletUtil.SquishLink(link)
                         newstr = newstr..rcount..";"..link..";"
                     end
                 end

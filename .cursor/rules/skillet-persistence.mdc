@@ -1,0 +1,42 @@
+---
+description: SavedVariables scopes, queue persistence, and upgrade migrations
+globs: Upgrades.lua,SkilletQueue.lua,Skillet.lua,SkilletStitch-1.1.lua
+alwaysApply: false
+---
+
+# Skillet Data Persistence
+
+## AceDB Scopes
+
+| Scope | Storage | Contents |
+|-------|---------|----------|
+| `profile` | `SkilletDB` | User preferences (vendor, tooltips, scale, transparency) |
+| `server` | `SkilletDB` | Recipes, queues, notes — shared across chars on realm/faction |
+| `char` | `SkilletDBPC` | Per-char tradeskill UI options, `include_alts` |
+
+Never store recipe caches or queues under `char` — they belong in `server`.
+
+## Queue Persistence
+
+- Save after every queue mutation: `Skillet:SaveQueue(Skillet.db.server.queues, Skillet.currentTrade)`
+- Load on trade change: `Skillet:LoadQueue(...)` then fire `SkilletStitch_Queue_Add`
+- Queue entries must include `recipe` links (legacy entries without links are purged in `Upgrades.lua`)
+
+## Schema Changes
+
+Add migration steps to `Upgrades.lua` → `Skillet:UpgradeDataAndOptions()`, called from `OnEnable`. Pattern:
+
+1. Detect old key/layout
+2. Move or transform data
+3. Nil out deprecated keys
+4. Default new options with explicit nil-check (see `show_bank_alt_counts` pattern)
+
+Do not rename SavedVariables root keys (`SkilletDB`, `SkilletDBPC`) or AceDB registration names.
+
+## Stitch Link Storage
+
+Recipe/reagent links are squished for storage (`squishlink` / `unsquishlink` in `SkilletStitch-1.1.lua`). Preserve this format when touching cache serialization.
+
+## Notes Keys
+
+Item notes keyed by full item link string under `SkilletDB.server.notes[playerName]`. Keep key format consistent when adding note features.

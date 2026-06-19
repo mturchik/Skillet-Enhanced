@@ -1,0 +1,50 @@
+---
+description: Ace2, event flow, and core-module conventions for Skillet Lua
+globs: Skillet.lua,SkilletStitch-1.1.lua,SkilletQueue.lua,TradeskillInfo.lua,LibPossessions.lua,Upgrades.lua
+alwaysApply: false
+---
+
+# Skillet Core Lua
+
+## Ace2 Patterns
+
+- Global addon object: `Skillet = AceLibrary("AceAddon-2.0"):new(...)`
+- Shadow locally for hot paths: `local Skillet = Skillet`
+- Localization: `local L = AceLibrary("AceLocale-2.2"):new("Skillet")`
+- Events: `self:RegisterEvent(...)` in `OnEnable`, `UnregisterAllEvents` in `OnDisable`
+- Scheduled work: `AceEvent:ScheduleEvent(name, func, delay)` with `IsEventScheduled` guard before scheduling
+
+## Method Naming
+
+- **`Skillet:MethodName`** — public or module-level API on the addon object
+- **`Skillet:internal_*`** — implementation; may change. Public wrappers live in `ThirdPartyHooks.lua`
+- **File-local `local function`** — private helpers (e.g. `add_items_to_queue`, `is_supported_trade`)
+
+When adding features, implement in `internal_*` and expose via `ThirdPartyHooks.lua` only if third-party mods need it.
+
+## Event Handlers
+
+Handler names match WoW events: `Skillet:TRADE_SKILL_SHOW`, `Skillet:BAG_UPDATE`, etc.
+
+After queue or scan changes, refresh UI through existing paths:
+- `Skillet:QueueChanged()` → updates queue, shopping list, merchant button
+- `Skillet:ScanCompleted()` → clears scan state, calls `UpdateTradeSkillWindow()`
+
+Do not bypass these when modifying queue or scan behavior.
+
+## Recipe Data
+
+- Read recipe metadata through **Stitch**, not raw Blizzard indices alone: `self.stitch:GetItemDataByIndex(trade, index)`
+- Sorted/filtered UI indices map via `GetSortedRecipeIndex()` — never assume list position equals Blizzard skill index
+- Recipe cache path: `SkilletDB.server.recipes[playerName][professionName]`
+
+## Stitch Events
+
+Fire/consume existing Stitch events; do not rename:
+`SkilletStitch_Scan_Complete`, `SkilletStitch_Queue_Add`, `SkilletStitch_Queue_Continue`, `SkilletStitch_Queue_Complete`
+
+## Blizzard API Defensive Calls
+
+- Nil-check `GetTradeSkillLine()` results (`""`, `"UNKNOWN"`)
+- Guard empty reagent slots before tooltip/craft calls
+- Merchant scan: treat `GetMerchantNumItems() == 148` as empty (existing workaround)

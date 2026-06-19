@@ -32,19 +32,7 @@ end
 
 -- Extracts the numeric item id from an item link
 function Skillet:GetItemIDFromLink(link)
-    local id
-    if link then
-        _,_,id = string.find(link, "|Hitem:(%d+):")
-    end
-
-    if link and not id then
-        -- might be an enchant ...
-        _,_,id = string.find(link, "|Henchant:(%d+)|")
-    end
-
-    if id then id = tonumber(id) end
-
-    return id
+    return SkilletUtil.GetItemIDFromLink(link)
 end
 
 -- Wrapper that calls the correct Get*Info for crafts and trades as appropriate

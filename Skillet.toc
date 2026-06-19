@@ -39,6 +39,7 @@ Locale\Locale-esES.lua
 
 #### Main files
 LibPossessions.lua
+SkilletUtil.lua
 SkilletStitch-1.1.lua
 Skillet.lua
 TradeskillInfo.lua

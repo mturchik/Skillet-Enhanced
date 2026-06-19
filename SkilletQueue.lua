@@ -234,28 +234,6 @@ function Skillet:GetPlayerQueues()
     return self:GetQueues(UnitName("player"))
 end
 
--- Updates the list with the required number of items
--- of "link". If "name" is already in the list, the count in updated,
--- otherwise it is appended to the end of the list.
-local function update_queued_list(list, player, name, link, needed)
-    for i=1,#list,1 do
-        if list[i]["name"] == name then
-            list[i]["count"] = list[i]["count"] + needed
-            if list[i].player and not string.find(list[i].player, player) then
-                list[i].player = list[i].player .. ", " .. player
-            end
-            return
-        end
-    end
-
-    table.insert(list, {
-        ["name"]  = name,
-        ["link"]  = link,
-        ["count"] = needed,
-        ["player"] = player,
-    })
-end
-
 --
 -- Checks the queued items and calculates how many of each reagent is required.
 -- The table of reagents and counts is returned. The will examine the queues for
@@ -288,7 +266,7 @@ function Skillet:GetReagentsForQueuedRecipes(playername)
                             if reagent then
                                 local needed = (count * reagent.needed)
                                 if needed > 0 then
-                                    update_queued_list(list, player, reagent.name, reagent.link, needed)
+                                    SkilletUtil.UpdateQueuedList(list, player, reagent.name, reagent.link, needed)
                                 end
                             end
                         end

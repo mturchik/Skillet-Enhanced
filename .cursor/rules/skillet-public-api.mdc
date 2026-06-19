@@ -1,0 +1,39 @@
+---
+description: Stability contract for ThirdPartyHooks and external addon integration
+globs: ThirdPartyHooks.lua,TradeskillInfo.lua
+alwaysApply: false
+---
+
+# Skillet Public API (Third-Party Contract)
+
+`ThirdPartyHooks.lua` documents methods whose **names and behavior must not break**. Treat this file as a compatibility boundary.
+
+## Do Not Change Without Strong Justification
+
+- Method names/signatures on `Skillet` listed in `ThirdPartyHooks.lua`
+- Return shapes documented in the TradeSkill Query API (`Recipe`, `Reagent`, `Profession`, `Character`)
+- Hook-chain semantics: chained methods must call prior hook results and combine (concatenate text, take max width, etc.)
+
+## Adding New Public Surface
+
+1. Implement logic in the owning module (`internal_*` or module-local function)
+2. Add a thin documented wrapper in `ThirdPartyHooks.lua`
+3. Document params, return type, and hook expectations in file header comments
+
+## Existing Integrations — Preserve
+
+Built-in compatibility shims must keep working:
+- **TradeJunkie** — reparent open button to `SkilletFrame`
+- **ArmorCraft** — reparent craft frame
+- **EnchantingSell** — skip Skillet when `ESeller` disables default craft frame
+
+New integration buttons: use `Skillet:AddButtonToTradeskillWindow(button)`.
+
+## Extensibility Points (call, don't hook)
+
+- `AddRecipeSorter(text, method)` — sorting signature: `(tradeskill, indexA, indexB, stitchLeft, stitchRight) -> boolean`
+- `AddPreButtonShowCallback` / `AddPreButtonHideCallback`
+
+## Read-Only Query API
+
+`GetCharacters`, `GetCharacterProfessions`, `GetCharacterTradeskills`, `GetCraftersForItem` return cached Stitch data — callers must treat as read-only; do not mutate returned tables.

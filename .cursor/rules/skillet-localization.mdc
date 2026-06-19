@@ -1,0 +1,34 @@
+---
+description: Localization conventions for Skillet AceLocale strings
+globs: Locale/**/*.lua
+alwaysApply: false
+---
+
+# Skillet Localization
+
+## Pattern
+
+Each locale file registers via AceLocale-2.2:
+
+```lua
+local L = AceLibrary("AceLocale-2.2"):new("Skillet")
+L:RegisterTranslations("enUS", function() return {
+    ["KEY"] = "English text",
+} end)
+```
+
+Non-enUS locales use translated strings; untranslated keys may use `["KEY"] = true` to fall back to enUS.
+
+## Adding Strings
+
+1. Add English key to `Locale/Locale-enUS.lua` first
+2. Add the same key to all other `Locale/Locale-*.lua` files (translate or `true`)
+3. Reference in code as `L["KEY"]` — never hardcode user-visible English in Lua outside enUS locale
+
+## Key Naming
+
+Follow existing convention: `SCREAMINGKEY` for simple labels, descriptive phrases for sentences (e.g. `["can be created from reagents in your inventory"]`).
+
+## Options & Waterfall
+
+Option names/descriptions in `Skillet.lua` options table use `L[...]` keys defined in locale files — add both `NAME` and `DESC` variants where existing options do.

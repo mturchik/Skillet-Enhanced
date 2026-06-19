@@ -1,0 +1,55 @@
+---
+description: UI layer conventions for Skillet frames, XML, and window updates
+globs: UI/**/*.lua,UI/**/*.xml
+alwaysApply: false
+---
+
+# Skillet UI Layer
+
+## XML + Lua Pairing
+
+- Frame layout and widget names: `UI/*.xml` (e.g. `SkilletFrame`, `SkilletReagent1`)
+- Behavior and updates: matching `UI/*.lua`
+- New visible widgets: add to XML first, wire handlers in Lua. Register new UI files in `Skillet.toc` after `Utils.lua`
+
+## Window Update Chain
+
+Public entry points delegate to internals (defined in `ThirdPartyHooks.lua` / `MainFrame.lua`):
+
+```
+ShowTradeSkillWindow → internal_ShowTradeSkillWindow
+UpdateTradeSkillWindow → internal_UpdateTradeSkillWindow
+HideAllWindows → internal_HideAllWindows
+```
+
+UI refresh flows through `internal_UpdateTradeSkillWindow()` — update sub-panels (`UpdateDetailsWindow`, `UpdateQueueWindow`) from there or its callers, not ad hoc scattered refreshes.
+
+## Existing UI Constants
+
+Reuse module constants; do not magic-number duplicates:
+- `SKILLET_TRADE_SKILL_HEIGHT`, `SKILLET_NUM_REAGENT_BUTTONS` (8 reagents max)
+- `SKILLET_REAGENT_MIN_WIDTH` / `SKILLET_REAGENT_MAX_WIDTH`
+- `skill_style_type` difficulty colors (optimal → trivial)
+
+## Legacy Frame Access
+
+Existing code uses `getglobal("SkilletReagent"..i)` — match this style in touched UI code; do not convert to `$parent` patterns in unrelated edits.
+
+## Tooltips
+
+- Recipe detail: `SkilletTradeskillTooltip` via `DisplayTradeskillTooltip`
+- Hover tooltips: `SetTradeSkillToolTip(skill, reagentIndex)` — validate skill index and reagent slot before calling `GameTooltip:SetTradeSkillItem` (see `exampleError.txt`)
+- Prefer Stitch reagent links as fallback when Blizzard index is stale
+
+## User-Facing Strings
+
+All visible text through `L["KEY"]` — add keys to `Locale/Locale-enUS.lua` and mirror in other locale files (or set `true` for untranslated fallthrough).
+
+## Combat Lockdown
+
+Block frame open/toggle in combat the way existing commands do (`UnitAffectingCombat("player")` check with chat message).
+
+## Resize & Appearance
+
+- Sub-panel resize: `Skillet:EnableResize(frame, min_w, min_h, refresh_method)`
+- Transparency/scale: `Skillet.db.profile.transparency` and `.scale` — apply via existing `UpdateTradeSkillWindow`, not direct one-off frame mutation

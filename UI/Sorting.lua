@@ -303,11 +303,7 @@ end
 --
 function Skillet:GetSortedRecipeIndex(index)
     if self:AreRecipesSorted() then
-        if not is_sort_desc() then
-            -- +1 is becuse lua arrays are 1-based, not 0-based.
-            index = #sorted_recipes + 1 - index
-        end
-        return sorted_recipes[index]
+        return SkilletUtil.MapSortedRecipeIndex(index, sorted_recipes, is_sort_desc())
     else
         return index
     end

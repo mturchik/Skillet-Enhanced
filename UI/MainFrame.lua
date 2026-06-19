@@ -312,32 +312,9 @@ local function is_hidden_skill(parent, skill_index)
     -- plain text search only
     local filtertext = parent:GetTradeSkillOption(parent.currentTrade, "filtertext")
     if filtertext and filtertext ~= "" then
-        local matched = false
-        local filter = string.lower(filtertext)
-
-        local name = string.lower(s.name)
-        if string.find(name, filter, 1, true) == nil then
-            -- no match against the filter for the item name, check the reagents
-            for i=1, SKILLET_NUM_REAGENT_BUTTONS, 1 do
-                if s[i] then
-                    name = string.lower(s[i].name)
-                    if string.find(name, filter, 1, true) ~= nil then
-                        -- matched a reagent name
-                        matched = true
-                        break
-                    end
-                end
-            end
-        else
-            matched = true
-        end
-
-
-        if not matched then
-            -- no name match means that this is filtered
+        if not SkilletUtil.RecipeMatchesFilter(s, filtertext, SKILLET_NUM_REAGENT_BUTTONS) then
             return true
         end
-
     end
 
     -- it's a recipe, work backwards to find the section it's
