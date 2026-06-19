@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+
+      - name: Run tests
+        run: lua5.1 tests/run.lua
+
+      - name: Verify version matches tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          TOC=$(grep '^## Version:' Skillet-Enhanced.toc | sed 's/## Version: //')
+          test "$TAG" = "$TOC" || { echo "Tag v$TAG != toc $TOC"; exit 1; }
+
+      - name: Build release zip
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          STAGING="release/Skillet-Enhanced"
+          mkdir -p "$STAGING"
+          rsync -a \
+            --exclude='tests/' \
+            --exclude='luaunit.lua' \
+            --exclude='.cursor/' \
+            --exclude='.docs/' \
+            --exclude='.github/' \
+            --exclude='.git/' \
+            --exclude='.gitignore' \
+            --exclude='.vs/' \
+            --exclude='exampleError.txt' \
+            ./ "$STAGING/"
+          cd release && zip -r "../Skillet-Enhanced-${VERSION}.zip" Skillet-Enhanced
+
+      - name: Extract changelog section
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          awk "/^## Skillet-Enhanced ${VERSION}\$/{found=1; next} found && /^## /{exit} found{print}" \
+            CHANGELOG.md > release-notes.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Skillet-Enhanced-*.zip
+          body_path: release-notes.md
+          generate_release_notes: false

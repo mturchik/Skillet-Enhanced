@@ -14,6 +14,15 @@ Skillet-Enhanced is a community fork of [Skillet](https://www.wowace.com/project
 
 ## Installation
 
+### From GitHub Releases (recommended)
+
+1. Download the latest `Skillet-Enhanced-X.Y.Z.zip` from [GitHub Releases](https://github.com/mturchik/Skillet-Enhanced/releases).
+2. Extract the `Skillet-Enhanced` folder into `World of Warcraft/Interface/AddOns/`.
+3. Enable **Skillet-Enhanced** in the character AddOns list.
+4. Disable the original **Skillet** addon if installed — do not run both.
+
+### From source
+
 1. Copy the `Skillet-Enhanced` folder into `World of Warcraft/Interface/AddOns/`.
 2. The folder name must match the `.toc` file: `Skillet-Enhanced/Skillet-Enhanced.toc`.
 3. Enable **Skillet-Enhanced** in the character AddOns list.
@@ -51,4 +60,4 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 lua tests/run.lua
 ```
 
-See `.docs/OVERVIEW.md` for architecture and `.docs/MANUAL_TEST_CHECKLIST.md` for in-game verification.
+See `.docs/OVERVIEW.md` for architecture, `.docs/MANUAL_TEST_CHECKLIST.md` for in-game verification, and `.docs/RELEASE.md` for publishing tagged releases to GitHub.
