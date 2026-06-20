@@ -420,6 +420,8 @@ function Skillet:OnEnable()
     self:RegisterEvent("AUCTION_HOUSE_SHOW")
     self:RegisterEvent("AUCTION_HOUSE_CLOSED")
 
+    self:RegisterEvent("PLAYER_REGEN_ENABLED")
+
     -- Messages from the Stitch libary
     -- These need to update the tradeskill window, not just the queue
     -- as we need to redisplay the number of items that can be crafted
@@ -519,7 +521,14 @@ local scan_notify_trade = nil
 local SCAN_CHUNK_SIZE = 30
 local SCAN_TITLE_UPDATE_INTERVAL = 0.25
 local scan_title_last_pct = nil
+local scan_title_last_done = nil
 local scan_title_last_time = nil
+
+local function reset_scan_title_throttle()
+    scan_title_last_pct = nil
+    scan_title_last_done = nil
+    scan_title_last_time = nil
+end
 
 local function cancel_scheduled_event(name)
     if AceEvent:IsEventScheduled(name) then
@@ -610,9 +619,9 @@ function Skillet:CancelScanSession()
     cancel_all_scan_events()
     scan_session = nil
     scan_notify_trade = nil
-    scan_title_last_pct = nil
-    scan_title_last_time = nil
+    reset_scan_title_throttle()
     self:UpdateWindowTitle()
+    self:RefreshScanInteractionState()
 end
 
 function Skillet:UpdateScanProgressUI(trade, progress_through_index)
@@ -626,10 +635,13 @@ function Skillet:UpdateScanProgressUI(trade, progress_through_index)
         progress_through_index
     )
 
-    local pct = SkilletUtil.ComputeScanPercent(scan_session.recipe_done, scan_session.recipe_total)
+    local done = scan_session.recipe_done_display or scan_session.recipe_done
+    local pct = SkilletUtil.ComputeScanPercent(done, scan_session.recipe_total)
     local now = GetTime()
-    if scan_title_last_pct == nil or scan_title_last_pct ~= pct
+    if scan_title_last_done == nil or scan_title_last_done ~= done
+        or scan_title_last_pct == nil or scan_title_last_pct ~= pct
         or not scan_title_last_time or (now - scan_title_last_time) >= SCAN_TITLE_UPDATE_INTERVAL then
+        scan_title_last_done = done
         scan_title_last_pct = pct
         scan_title_last_time = now
         self:UpdateWindowTitle()
@@ -642,20 +654,60 @@ local function Skillet_deferred_scan_start()
         return
     end
 
+    if InCombatLockdown() then
+        schedule_deferred_scan_after_combat()
+        return
+    end
+
     local trade = session.profession
     local opts = { force = session.force, notify = session.notify }
-    scan_session = nil
 
-    if GetNumTradeSkills() > 0 then
-        Skillet:BeginScanSession(trade, opts)
-    else
-        scan_session = session
+    if GetNumTradeSkills() <= 0 then
         schedule_deferred_scan_start()
+        return
     end
+
+    scan_session = nil
+    Skillet:BeginScanSession(trade, opts)
 end
 
 local function schedule_deferred_scan_start()
     schedule_event_once("Skillet_DeferredScanStart", Skillet_deferred_scan_start, 0.1)
+end
+
+local function Skillet_deferred_scan_after_combat()
+    if InCombatLockdown() then
+        AceEvent:ScheduleLeaveCombatAction(Skillet_deferred_scan_after_combat)
+        return
+    end
+    Skillet_deferred_scan_start()
+end
+
+local function schedule_deferred_scan_after_combat()
+    AceEvent:ScheduleLeaveCombatAction(Skillet_deferred_scan_after_combat)
+end
+
+local function Skillet_resume_scan_after_list_change(trade)
+    if not scan_session or scan_session.profession ~= trade then
+        return
+    end
+
+    local blizz_count = GetNumTradeSkills()
+    if blizz_count <= 0 then
+        return
+    end
+
+    local cached = Skillet.stitch.data[trade]
+    SkilletUtil.ResyncScanSessionAfterRecipeListChange(scan_session, blizz_count, cached)
+
+    if scan_session.waiting_retry then
+        scan_session.waiting_retry = false
+        cancel_scheduled_event("Skillet_ScanRetry")
+    end
+
+    if SkilletUtil.IsScanSessionRunnable(scan_session) then
+        Skillet_start_scan_driver()
+    end
 end
 
 local function Skillet_scan_retry()
@@ -680,13 +732,13 @@ function Skillet:FinishScanSession(trade)
     end
     scan_session = nil
     scan_notify_trade = nil
-    scan_title_last_pct = nil
-    scan_title_last_time = nil
+    reset_scan_title_throttle()
     self:UpdateWindowTitle()
     if notify then
         self:Print(L["Scan completed"] .. ": " .. trade)
     end
     AceEvent:TriggerEvent("SkilletStitch_Scan_Complete", trade)
+    self:RefreshScanInteractionState()
 end
 
 function Skillet:HandleScanShredded(trade)
@@ -732,6 +784,7 @@ function Skillet:ProcessScanChunk()
             self:FinishScanSession(trade)
             return
         elseif self:IsRecipeCacheStale(trade) then
+            scan_session.is_header, scan_session.live_links = SkilletUtil.BuildTradeSkillHeaderMaps(blizz_count)
             start_index = SkilletUtil.FindFirstStaleRecipeIndex(
                 blizz_count, scan_session.is_header, self.stitch.data[trade], scan_session.live_links) or 1
             scan_session.next_index = start_index
@@ -746,7 +799,7 @@ function Skillet:ProcessScanChunk()
 
     if shred then
         local progress_through = nil
-        if scan_session.forced and shred_index then
+        if shred_index then
             progress_through = shred_index - 1
         end
         self:UpdateScanProgressUI(trade, progress_through)
@@ -772,6 +825,9 @@ end
 
 function Skillet:BeginScanSession(trade, opts)
     opts = opts or {}
+    if InCombatLockdown() then
+        return false
+    end
     local forced = opts.force and true or false
     local notify = opts.notify and true or false
 
@@ -795,6 +851,8 @@ function Skillet:BeginScanSession(trade, opts)
         next_index = stale_index
     end
 
+    local fresh_done = forced and 0 or SkilletUtil.CountFreshCachedRecipes(blizz_count, is_header, cached, live_links)
+
     scan_session = {
         profession = trade,
         next_index = next_index,
@@ -802,7 +860,8 @@ function Skillet:BeginScanSession(trade, opts)
         is_header = is_header,
         live_links = live_links,
         recipe_total = SkilletUtil.CountNonHeaderRecipes(blizz_count, is_header),
-        recipe_done = forced and 0 or SkilletUtil.CountCachedRecipes(blizz_count, is_header, cached),
+        recipe_done = fresh_done,
+        recipe_done_display = fresh_done,
         forced = forced,
         notify = notify,
         pending = false,
@@ -814,9 +873,9 @@ function Skillet:BeginScanSession(trade, opts)
         scan_notify_trade = trade
     end
 
-    scan_title_last_pct = nil
-    scan_title_last_time = nil
+    reset_scan_title_throttle()
     self:UpdateScanProgressUI(trade, scan_session.forced and 0 or nil)
+    self:RefreshScanInteractionState()
     self:ProcessScanChunk()
     return true
 end
@@ -833,7 +892,9 @@ function Skillet:RequestRecipeScan(trade, opts)
     end
 
     if scan_session and scan_session.pending and scan_session.profession == trade then
-        if GetNumTradeSkills() > 0 then
+        if InCombatLockdown() then
+            schedule_deferred_scan_after_combat()
+        elseif GetNumTradeSkills() > 0 then
             Skillet_deferred_scan_start()
         else
             schedule_deferred_scan_start()
@@ -842,6 +903,7 @@ function Skillet:RequestRecipeScan(trade, opts)
     end
 
     if self:IsScanInProgress(trade) then
+        Skillet_resume_scan_after_list_change(trade)
         return true
     end
 
@@ -854,6 +916,17 @@ function Skillet:RequestRecipeScan(trade, opts)
     end
 
     cancel_scan_retry_events()
+
+    if InCombatLockdown() then
+        scan_session = {
+            profession = trade,
+            pending = true,
+            notify = opts.notify and true or false,
+            force = opts.force and true or false,
+        }
+        schedule_deferred_scan_after_combat()
+        return true
+    end
 
     local blizz_count = GetNumTradeSkills()
     if blizz_count <= 0 then
@@ -884,7 +957,13 @@ function Skillet:ScanCompleted(prof)
             self:ResortRecipes(true)
             self:UpdateTradeSkillWindow()
         end
+        if self.selectedSkill and self.selectedSkill > 0 then
+            SelectTradeSkill(self.selectedSkill)
+            self:UpdateDetailsWindow(self.selectedSkill)
+        end
     end
+
+    self:RefreshScanInteractionState()
 
     scan_just_completed_prof = prof
     if not AceEvent:IsEventScheduled("Skillet_clear_scan_flag") then
@@ -900,6 +979,18 @@ function Skillet:IsScanInProgress(trade)
         return scan_session.profession == trade
     end
     return true
+end
+
+-- True when queue/filter/sort/craft handlers should no-op for the given trade.
+function Skillet:BlocksScanActions(trade)
+    return self:IsScanInProgress(trade or self.currentTrade)
+end
+
+-- Safe to call before MainFrame loads; UpdateScanInteractionState is defined in UI/MainFrame.lua.
+function Skillet:RefreshScanInteractionState()
+    if self.UpdateScanInteractionState then
+        self:UpdateScanInteractionState()
+    end
 end
 
 -- Backward-compatible alias used by Stitch.
@@ -997,14 +1088,20 @@ function Skillet:TRADE_SKILL_UPDATE()
     end
     self:UpdateTradeSkill()
     if scan_session and scan_session.pending then
+        if InCombatLockdown() then
+            schedule_deferred_scan_after_combat()
+            return
+        end
         Skillet_deferred_scan_start()
         return
     end
     if self:IsScanInProgress(self.currentTrade) then
+        Skillet_resume_scan_after_list_change(self.currentTrade)
         self:UpdateScanProgressUI(self.currentTrade)
+        self:RefreshScanInteractionState()
         return
     end
-    if self:IsRecipeCacheStale() and not self:IsScanInProgress(self.currentTrade) then
+    if self:IsRecipeCacheStale() and not self:BlocksScanActions() then
         capture_selected_recipe(self)
         if cache_recipes_if_needed(self, false, false) then
             return
@@ -1012,6 +1109,22 @@ function Skillet:TRADE_SKILL_UPDATE()
     end
     self:ResetTradeSkillWindow()
     self:UpdateTradeSkillWindow()
+    self:RefreshScanInteractionState()
+end
+
+function Skillet:PLAYER_REGEN_ENABLED()
+    self:RefreshScanInteractionState()
+    if scan_session and scan_session.pending then
+        if GetNumTradeSkills() > 0 then
+            Skillet_deferred_scan_start()
+        else
+            schedule_deferred_scan_start()
+        end
+        return
+    end
+    if scan_session and SkilletUtil.IsScanSessionRunnable(scan_session) then
+        self:ProcessScanChunk()
+    end
 end
 
 -- Called when the trade skill window is closed
@@ -1116,6 +1229,7 @@ function Skillet:internal_ShowTradeSkillWindow()
     end
 
     self:UpdateWindowTitle()
+    self:RefreshScanInteractionState()
 end
 
 --
@@ -1170,6 +1284,9 @@ end
 
 -- Triggers a rescan of the currently selected tradeskill
 function Skillet:RescanTrade(forced)
+    if self:BlocksScanActions() then
+        return
+    end
     local trade = self:GetTradeSkillLine()
     if trade and trade ~= "UNKNOWN" and is_known_trade_skill(trade) and not IsTradeSkillLinked() then
         capture_selected_recipe(self)
@@ -1207,6 +1324,13 @@ function Skillet:SetSelectedSkill(skill_index, was_clicked)
     end
 
     self.selectedSkill = skill_index
+    if self:IsScanInProgress(self.currentTrade) then
+        pending_selected_recipe = nil
+        if skill_index and skill_index > 0 then
+            self:UpdateDetailsWindow(skill_index)
+        end
+        return
+    end
     if skill_index and skill_index > 0 then
         SelectTradeSkill(skill_index)
     end
@@ -1252,6 +1376,9 @@ end
 
 -- Toggles a hide filter checkbox and refreshes the appropriate list tier.
 function Skillet:ToggleRecipeFilterOption(option, checkbox)
+    if self:BlocksScanActions() then
+        return
+    end
     if checkbox and checkbox:GetChecked() then
         PlaySound("igMainMenuOptionCheckBoxOn")
     end
@@ -1268,6 +1395,9 @@ end
 
 -- Updates the text we filter the list of recipes against.
 function Skillet:UpdateFilter(text)
+    if self:BlocksScanActions() then
+        return
+    end
     self:SetTradeSkillOption(self.currentTrade, "filtertext", text)
     FauxScrollFrame_SetOffset(SkilletSkillList, 0)
     self:internal_RefreshRecipeList(true)

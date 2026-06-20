@@ -246,12 +246,23 @@ function Skillet:InitializeSorting()
 
     recipe_sort_method = NOSORT
 
+    local function sort_direction_on_click(descending)
+        if Skillet:BlocksScanActions() then
+            return
+        end
+        set_sort_desc(descending)
+        if descending then
+            SkilletSortAscButton:Hide()
+            SkilletSortDescButton:Show()
+        else
+            SkilletSortDescButton:Hide()
+            SkilletSortAscButton:Show()
+        end
+        Skillet:internal_RefreshRecipeList(true)
+    end
+
     SkilletSortAscButton:SetScript("OnClick", function()
-        -- clicked the button will toggle sort ascending off
-        set_sort_desc(true)
-        SkilletSortAscButton:Hide()
-        SkilletSortDescButton:Show()
-        self:internal_RefreshRecipeList(true)
+        sort_direction_on_click(true)
     end)
     SkilletSortAscButton:SetScript("OnEnter", function()
         GameTooltip:SetOwner(SkilletSortAscButton, "ANCHOR_RIGHT")
@@ -262,11 +273,7 @@ function Skillet:InitializeSorting()
     end)
 
     SkilletSortDescButton:SetScript("OnClick", function()
-        -- clicked the button will toggle sort descending off
-        set_sort_desc(false)
-        SkilletSortDescButton:Hide()
-        SkilletSortAscButton:Show()
-        self:internal_RefreshRecipeList(true)
+        sort_direction_on_click(false)
     end)
     SkilletSortDescButton:SetScript("OnEnter", function()
         GameTooltip:SetOwner(SkilletSortDescButton, "ANCHOR_RIGHT")
@@ -373,8 +380,12 @@ function Skillet:SortDropdown_Initialize()
 
 end
 
--- Called when the user selects an item in the sorting drop down
-function Skillet:SortDropdown_OnClick()
+-- Called when the user selects an item in the sorting drop down.
+-- Registered as info.func = Skillet.SortDropdown_OnClick (dot); self is the menu button, not Skillet.
+function Skillet.SortDropdown_OnClick()
+    if Skillet:BlocksScanActions() then
+        return
+    end
     UIDropDownMenu_SetSelectedID(SkilletSortDropdown, this:GetID())
     local entry = sorters[this:GetID()]
 

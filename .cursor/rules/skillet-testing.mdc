@@ -28,6 +28,7 @@ alwaysApply: true
 | Queue / shopping-list aggregation | `tests/test_queue.lua` |
 | Sort index mapping, name comparison | `tests/test_sort.lua` |
 | Recipe filter matching | `tests/test_filter.lua` |
+| Scan session / cache staleness / progress | `tests/test_cache.lua` |
 
 Shared fixtures: `tests/fixtures/recipes.lua`. WoW API stubs: `tests/wow_mock.lua`.
 
@@ -36,6 +37,8 @@ Prefer testing via `SkilletUtil` (loaded by `tests/run.lua`) rather than duplica
 ## What still needs manual verification
 
 UI, events, queue execution, tooltips, and vendor/bank flows are **not** covered by unit tests. After changes to `UI/`, `Skillet.lua` event handlers, or queue processing, run [`.docs/MANUAL_TEST_CHECKLIST.md`](.docs/MANUAL_TEST_CHECKLIST.md).
+
+Scan-related changes must also satisfy all three primary scan triggers — see [`.cursor/rules/skillet-scan-triggers.mdc`](.cursor/rules/skillet-scan-triggers.mdc).
 
 ## Do not ship test artifacts
 

@@ -2,6 +2,10 @@ local lu = require("luaunit")
 
 TestCache = {}
 
+local AZURE_RING_CACHE = ";1eff00|24027|Azure Moonstone Ring;d5;1;;"
+local THICK_NECKLACE_LINK = "|cff0070dd|Hitem:31303:0:0:0:0:0:0:0:0|h[Thick Adamantite Necklace]|h|r"
+local AZURE_RING_LINK = "|cff1eff00|Hitem:24027:0:0:0:0:0:0:0:0|h[Azure Moonstone Ring]|h|r"
+
 function TestCache:test_emptyBlizzCountNotStale()
     lu.assertFalse(SkilletUtil.IsRecipeIndexCacheStale(0, {}, {}))
 end
@@ -83,14 +87,61 @@ function TestCache:test_syncScanSessionProgress()
     SkilletUtil.SyncScanSessionProgress(session, cached, nil)
     lu.assertEquals(session.recipe_total, 3)
     lu.assertEquals(session.recipe_done, 2)
+    lu.assertEquals(session.recipe_done_display, 2)
 
     session.forced = true
     session.next_index = 4
     SkilletUtil.SyncScanSessionProgress(session, cached, nil)
     lu.assertEquals(session.recipe_done, 2)
+    lu.assertEquals(session.recipe_done_display, 2)
 
     SkilletUtil.SyncScanSessionProgress(session, cached, 1)
-    lu.assertEquals(session.recipe_done, 0)
+    lu.assertEquals(session.recipe_done, 2)
+    lu.assertEquals(session.recipe_done_display, 2)
+end
+
+function TestCache:test_countFreshCachedRecipes()
+    local headers = { true, false, false }
+    local cached = { [2] = AZURE_RING_CACHE, [3] = AZURE_RING_CACHE }
+    local live_links = { [2] = AZURE_RING_LINK, [3] = THICK_NECKLACE_LINK }
+    lu.assertEquals(SkilletUtil.CountCachedRecipes(3, headers, cached), 2)
+    lu.assertEquals(SkilletUtil.CountFreshCachedRecipes(3, headers, cached, live_links), 1)
+end
+
+function TestCache:test_syncScanSessionProgressStaleNotComplete()
+    local headers = { true, false, false }
+    local cached = { [2] = AZURE_RING_CACHE, [3] = AZURE_RING_CACHE }
+    local live_links = { [2] = AZURE_RING_LINK, [3] = THICK_NECKLACE_LINK }
+    local session = {
+        blizz_count = 3,
+        is_header = headers,
+        live_links = live_links,
+        forced = false,
+        next_index = 3,
+    }
+    SkilletUtil.SyncScanSessionProgress(session, cached, nil)
+    lu.assertEquals(session.recipe_total, 2)
+    lu.assertEquals(session.recipe_done_display, 1)
+end
+
+function TestCache:test_syncScanSessionProgressMonotonicDisplay()
+    local headers = { true, false, false, true, false }
+    local cached = { [2] = "a", [3] = "b", [5] = "c" }
+    local session = {
+        blizz_count = 5,
+        is_header = headers,
+        forced = false,
+        next_index = 5,
+        recipe_done_display = 3,
+    }
+    cached[3] = nil
+    SkilletUtil.SyncScanSessionProgress(session, cached, 4)
+    lu.assertEquals(session.recipe_done, 2)
+    lu.assertEquals(session.recipe_done_display, 3)
+
+    SkilletUtil.SyncScanSessionProgress(session, cached, 5)
+    lu.assertEquals(session.recipe_done, 3)
+    lu.assertEquals(session.recipe_done_display, 3)
 end
 
 function TestCache:test_isScanSessionUIActive()
@@ -132,10 +183,6 @@ function TestCache:test_formatScanProgress()
     )
 end
 
-local AZURE_RING_CACHE = ";1eff00|24027|Azure Moonstone Ring;d5;1;;"
-local THICK_NECKLACE_LINK = "|cff0070dd|Hitem:31303:0:0:0:0:0:0:0:0|h[Thick Adamantite Necklace]|h|r"
-local AZURE_RING_LINK = "|cff1eff00|Hitem:24027:0:0:0:0:0:0:0:0|h[Azure Moonstone Ring]|h|r"
-
 function TestCache:test_getRecipeResultIdFromCacheString()
     lu.assertEquals(SkilletUtil.GetRecipeResultIdFromCacheString(AZURE_RING_CACHE), 24027)
     lu.assertNil(SkilletUtil.GetRecipeResultIdFromCacheString(nil))
@@ -156,4 +203,32 @@ end
 
 function TestCache:test_missingLiveLinkDoesNotForceStale()
     lu.assertFalse(SkilletUtil.IsCachedRecipeStringStale(AZURE_RING_CACHE, nil))
+end
+
+function TestCache:test_resyncScanRewindsCursorWhenEarlierRowStale()
+    local session = {
+        blizz_count = 2,
+        next_index = 5,
+        is_header = { false, false },
+        live_links = { [1] = "a", [2] = "b" },
+    }
+    local cached = { [1] = "a" }
+    local changed = SkilletUtil.ResyncScanSessionAfterRecipeListChange(session, 3, cached)
+    lu.assertTrue(changed)
+    lu.assertEquals(3, session.blizz_count)
+    lu.assertEquals(2, session.next_index)
+end
+
+function TestCache:test_resyncScanKeepsCursorWhenStaleIsAhead()
+    local session = {
+        blizz_count = 3,
+        next_index = 2,
+        is_header = { false, false, false },
+        live_links = { [1] = "a", [2] = "b", [3] = "c" },
+    }
+    local cached = { [1] = "a", [2] = "b" }
+    local changed = SkilletUtil.ResyncScanSessionAfterRecipeListChange(session, 4, cached)
+    lu.assertTrue(changed)
+    lu.assertEquals(4, session.blizz_count)
+    lu.assertEquals(2, session.next_index)
 end

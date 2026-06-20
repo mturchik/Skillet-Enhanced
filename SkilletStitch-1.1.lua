@@ -596,6 +596,18 @@ function SkilletStitch:GetNumQueuedItems(index)
     return count
 end
 
+local function keep_cached_on_shred(prof_data, i)
+    local cached = prof_data and prof_data[i]
+    if not cached then
+        return false
+    end
+    local live_link = GetTradeSkillItemLink(i)
+    if SkilletUtil.IsCachedRecipeStringStale(cached, live_link) then
+        return false
+    end
+    return true
+end
+
 local function scan_recipe_index(self, prof, i)
     local skillname, skilltype = GetTradeSkillInfo(i)
     if skilltype == "header" or not skillname then
@@ -605,7 +617,9 @@ local function scan_recipe_index(self, prof, i)
 
     local link = GetTradeSkillItemLink(i)
     if not link then
-        self.data[prof][i] = nil
+        if not keep_cached_on_shred(self.data[prof], i) then
+            self.data[prof][i] = nil
+        end
         return false, true
     end
 
@@ -634,7 +648,9 @@ local function scan_recipe_index(self, prof, i)
         local _, _, rcount, _ = GetTradeSkillReagentInfo(i,j)
         local reagent_link = GetTradeSkillReagentItemLink(i,j)
         if not reagent_link then
-            self.data[prof][i] = nil
+            if not keep_cached_on_shred(self.data[prof], i) then
+                self.data[prof][i] = nil
+            end
             return false, true
         else
             reagent_link = SkilletUtil.SquishLink(reagent_link)

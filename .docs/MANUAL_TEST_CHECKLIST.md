@@ -35,8 +35,9 @@ Run this checklist after any change to UI, events, queue processing, or tradeski
 - [ ] **23. Bank/alt counts** — Enable bank/alt counts in options; deposit a reagent to the bank and confirm visible `[bags/bank/alts]` brackets update correctly
 - [ ] **24. Switch profession mid-scan** — Open Engineering (stale cache) and wait for scan progress; switch to Blacksmith before scan finishes; Blacksmith scan starts, progress text updates, and the recipe list populates
 - [ ] **25. Close and reopen mid-scan** — Open a profession with stale cache; close the tradeskill window while progress is below 100%; reopen the same profession; scan resumes from partial cache and completes
-- [ ] **26. Scan progress percentage** — On a large profession (e.g. Engineering), confirm the title bar shows increasing `Skillet: <profession> (Scanning: n/total, pct%)` while scanning
+- [ ] **26. Scan progress percentage** — On a large profession (e.g. Engineering), confirm the title bar shows increasing `Skillet: <profession> (Scanning: n/total, pct%)` while scanning; `n` must not jump backward
 - [ ] **27. No list flicker during scan** — Open a profession with stale cache (e.g. Tailoring); while the title progress updates, the recipe list must not flash or repaint repeatedly; after scan completes, the list populates in one refresh. Reopen with fresh cache — no scan, no flash
+- [ ] **28. Scan progress during interaction** — On a large profession with stale cache, confirm title bar shows scan progress while the recipe list stays **fully bright and clickable on the whole row** (not only the `[bags/bank/alts]` count brackets). Filter/sort/queue/craft should remain guarded during scan; after scan completes, all controls work. **Combat open:** open tradeskill while in combat — list browsable; scan starts after combat ends. **Learn recipe:** with window open, learn a new recipe; brief title-bar scan is OK; after completion, list and controls work and the new recipe appears
 
 ## Automated Tests (off-client)
 

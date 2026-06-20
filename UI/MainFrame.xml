@@ -786,7 +786,7 @@
             # A highlight frame for the currently selected recipe
             #
             -->
-            <Frame name="SkilletHighlightFrame" hidden="true">
+            <Frame name="SkilletHighlightFrame" hidden="true" enableMouse="false">
                 <Size>
                     <AbsDimension x="290" y="16"/>
                 </Size>

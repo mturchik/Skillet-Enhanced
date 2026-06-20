@@ -285,22 +285,138 @@ function Skillet:UpdateNumItemsSlider(item_count, clicked)
     end
 end
 
--- Called when the list of skills is scrolled
-function Skillet:SkillList_OnScroll()
+-- Called when the list of skills is scrolled.
+-- Registered as Skillet.SkillList_OnScroll (dot) from FauxScrollFrame XML; first arg is the scroll frame, not Skillet.
+function Skillet.SkillList_OnScroll()
     Skillet:internal_RefreshRecipeList(false)
 end
 
--- Called when the list of queued items is scrolled
-function Skillet:QueueList_OnScroll()
+-- Called when the list of queued items is scrolled.
+-- Registered as Skillet.QueueList_OnScroll (dot) from FauxScrollFrame XML.
+function Skillet.QueueList_OnScroll()
     Skillet:UpdateQueueWindow()
 end
 
 -- Recipe list module locals must be declared before any function that references
 -- them. In Lua 5.1, a local name is not visible above its declaration line; a
 -- reference there resolves as a (nil) global and fails at runtime.
+-- CreateTradeSkillWindow is above this block — do not call these helpers from there.
+-- Button stacking is applied in get_recipe_button, UpdateScanInteractionState, and paint.
 local num_recipe_buttons = 0
+local num_queue_buttons = 0
 local craftable_count_cache = nil
 local skill_type_cache = nil
+local RECIPE_BUTTON_ABOVE_SCROLL = 8
+
+local function set_widget_interaction(widget, enabled)
+    if not widget then
+        return
+    end
+    if widget.EnableMouse then
+        widget:EnableMouse(enabled)
+    end
+    if type(widget.Enable) == "function" and type(widget.Disable) == "function" then
+        if enabled then
+            -- EnableMouse above restores scroll/list input even when combat blocks :Enable().
+            if not InCombatLockdown() then
+                widget:Enable()
+            end
+        elseif not InCombatLockdown() then
+            widget:Disable()
+        end
+    end
+end
+
+local function visible_recipe_button_count()
+    if not SkilletSkillList then
+        return num_recipe_buttons
+    end
+    local count = math.floor(SkilletSkillList:GetHeight() / SKILLET_TRADE_SKILL_HEIGHT)
+    return math.max(count, num_recipe_buttons)
+end
+
+local function visible_queue_button_count()
+    if not SkilletQueueList then
+        return num_queue_buttons
+    end
+    local count = math.floor(SkilletQueueList:GetHeight() / SKILLET_TRADE_SKILL_HEIGHT)
+    return math.max(count, num_queue_buttons)
+end
+
+local function clear_scan_panel_dim()
+    if SkilletSkillListParent then
+        SkilletSkillListParent:SetAlpha(1.0)
+    end
+    if SkilletReagentParent then
+        SkilletReagentParent:SetAlpha(1.0)
+    end
+    if SkilletQueueParent then
+        SkilletQueueParent:SetAlpha(1.0)
+    end
+end
+
+local function raise_recipe_button_above_scroll(button)
+    if not button or not SkilletSkillList then
+        return
+    end
+    button:SetFrameLevel(SkilletSkillList:GetFrameLevel() + RECIPE_BUTTON_ABOVE_SCROLL)
+    button:EnableMouse(true)
+end
+
+local function ensure_tradeskill_widgets_enabled()
+    set_widget_interaction(SkilletSkillList, true)
+    for i = 1, visible_recipe_button_count(), 1 do
+        set_widget_interaction(getglobal("SkilletScrollButton" .. i), true)
+    end
+
+    set_widget_interaction(SkilletFilterBox, true)
+    set_widget_interaction(SkilletHideUncraftableRecipes, true)
+    set_widget_interaction(SkilletHideTrivialRecipes, true)
+    if SkilletSortDropdown then
+        pcall(UIDropDownMenu_EnableDropDown, SkilletSortDropdown)
+    end
+    set_widget_interaction(SkilletSortAscButton, true)
+    set_widget_interaction(SkilletSortDescButton, true)
+    set_widget_interaction(SkilletRescanButton, true)
+
+    set_widget_interaction(SkilletRecipeNotesButton, true)
+    set_widget_interaction(SkilletPreviousItemButton, true)
+    set_widget_interaction(SkilletSkillIcon, true)
+    for i = 1, SKILLET_NUM_REAGENT_BUTTONS, 1 do
+        set_widget_interaction(getglobal("SkilletReagent" .. i), true)
+    end
+
+    set_widget_interaction(SkilletQueueAllButton, true)
+    set_widget_interaction(SkilletCreateAllButton, true)
+    set_widget_interaction(SkilletQueueButton, true)
+    set_widget_interaction(SkilletCreateButton, true)
+    set_widget_interaction(SkilletCreateCountSlider, true)
+    set_widget_interaction(SkilletItemCountInputBox, true)
+
+    set_widget_interaction(SkilletQueueList, true)
+    set_widget_interaction(SkilletStartQueueButton, true)
+    set_widget_interaction(SkilletEmptyQueueButton, true)
+    set_widget_interaction(SkilletShoppingListButton, true)
+    for i = 1, visible_queue_button_count(), 1 do
+        set_widget_interaction(getglobal("SkilletQueueButton" .. i), true)
+    end
+end
+
+-- Re-enables widgets after scan/cancel. Scan progress is title-bar only — never dim panels
+-- (dimmed parents made the window look locked and could stick after scan errors).
+function Skillet:UpdateScanInteractionState()
+    if not SkilletSkillListParent then
+        return
+    end
+
+    clear_scan_panel_dim()
+    ensure_tradeskill_widgets_enabled()
+    raise_recipe_button_above_scroll(getglobal("SkilletScrollButton1"))
+
+    if self.UpdateQueueWindow then
+        self:UpdateQueueWindow()
+    end
+end
 
 -- Figures out whether or not the section a recipe
 -- is in has been hidden (collapsed or filtered).
@@ -501,8 +617,8 @@ local function get_recipe_button(i)
         button = CreateFrame("Button", "SkilletScrollButton"..i, SkilletSkillListParent, "SkilletSkillButtonTemplate")
         button:SetParent(SkilletSkillListParent)
         button:SetPoint("TOPLEFT", "SkilletScrollButton"..(i-1), "BOTTOMLEFT")
-        button:SetFrameLevel(SkilletSkillListParent:GetFrameLevel() + 1)
     end
+    raise_recipe_button_above_scroll(button)
     return button
 end
 
@@ -711,7 +827,8 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
 
                     SkilletHighlightFrame:SetPoint("TOPLEFT", "SkilletScrollButton"..i, "TOPLEFT", 0, 0)
                     SkilletHighlightFrame:SetWidth(button:GetWidth())
-                    SkilletHighlightFrame:SetFrameLevel(button:GetFrameLevel())
+                    SkilletHighlightFrame:SetFrameLevel(button:GetFrameLevel() - 1)
+                    SkilletHighlightFrame:EnableMouse(false)
                     SkilletHighlight:SetTexture(0.7, 0.7, 0.7, 0.4)
                     SkilletHighlightFrame:Show()
                     button:LockHighlight()
@@ -730,6 +847,10 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
     for i = button_count + 1, num_recipe_buttons, 1 do
         local button = get_recipe_button(i)
         hide_button(button, self.currentTrade, 0, i)
+    end
+
+    if not self:BlocksScanActions() then
+        clear_scan_panel_dim()
     end
 end
 
@@ -783,21 +904,13 @@ function Skillet:internal_RefreshWindowChrome()
     SkilletRankFrameSkillRank:SetText(rank .. "/" .. maxRank)
 end
 
-local function skip_list_refresh_during_scan(self)
-    if self:IsScanInProgress(self.currentTrade) then
-        self:UpdateWindowTitle()
-        return true
-    end
-    return false
-end
-
 function Skillet:internal_RefreshRecipeList(syncSelection)
     if not self.currentTrade or self.currentTrade == "UNKNOWN" then
         self:SetSelectedSkill(nil)
         return
     end
 
-    if skip_list_refresh_during_scan(self) then
+    if self:BlocksScanActions() then
         return
     end
 
@@ -844,7 +957,7 @@ function Skillet:internal_UpdateTradeSkillWindow()
         return
     end
 
-    if skip_list_refresh_during_scan(self) then
+    if self:BlocksScanActions() then
         return
     end
 
@@ -1149,7 +1262,6 @@ function Skillet:UpdateDetailsWindow(skill_index)
 
 end
 
-local num_queue_buttons = 0
 local function get_queue_button(i)
     local button = getglobal("SkilletQueueButton"..i)
     if not button then
@@ -1167,19 +1279,19 @@ function Skillet:UpdateQueueWindow()
     local queue = self.stitch:GetQueueInfo();
     if not queue then
         SkilletStartQueueButton:SetText(L["Start"])
-        SkilletEmptyQueueButton:Disable()
-        SkilletStartQueueButton:Disable()
+        set_widget_interaction(SkilletEmptyQueueButton, false)
+        set_widget_interaction(SkilletStartQueueButton, false)
         return
     end
 
     local numItems = #queue;
 
     if numItems > 0 then
-        SkilletStartQueueButton:Enable()
-        SkilletEmptyQueueButton:Enable()
+        set_widget_interaction(SkilletStartQueueButton, true)
+        set_widget_interaction(SkilletEmptyQueueButton, true)
     else
-        SkilletStartQueueButton:Disable()
-        SkilletEmptyQueueButton:Disable()
+        set_widget_interaction(SkilletStartQueueButton, false)
+        set_widget_interaction(SkilletEmptyQueueButton, false)
     end
 
     if self.stitch.queuecasting then
@@ -1289,6 +1401,9 @@ end
 
 -- Go to the previous recipe in the history list.
 function Skillet:GoToPreviousRecipe()
+    if self:BlocksScanActions() then
+        return
+    end
     local itemID = table.remove(previousRecipies)
     if itemID then
         self:SetSelectedSkill(itemID);
@@ -1322,6 +1437,9 @@ end
 
 -- Called when the reagent button is clicked
 function Skillet:ReagentButtonOnClick(button, skill, index)
+    if self:BlocksScanActions() then
+        return
+    end
     if not self.db.profile.link_craftable_reagents then
         return
     end
@@ -1350,6 +1468,9 @@ end
 
 -- The start/pause queue button.
 function Skillet:StartQueue_OnClick(button)
+    if self:BlocksScanActions() then
+        return
+    end
     if self.stitch.queuecasting then
         self.stitch.queuecasting = false
         self.stitch:CancelCast() -- next update will reset the text
@@ -1374,11 +1495,12 @@ function Skillet:UpdateWindowTitle()
     end
 
     if self.IsScanInProgress and self:IsScanInProgress(trade) and session then
-        local pct = SkilletUtil.ComputeScanPercent(session.recipe_done, session.recipe_total)
+        local done = session.recipe_done_display or session.recipe_done
+        local pct = SkilletUtil.ComputeScanPercent(done, session.recipe_total)
         title:SetText(string.format(
             L["Window title scanning"],
             trade,
-            session.recipe_done,
+            done,
             session.recipe_total,
             pct
         ))
@@ -1457,6 +1579,8 @@ function Skillet:Tradeskill_OnShow()
             return self:HideAllWindows() or found
         end
     end
+
+    self:RefreshScanInteractionState()
 end
 
 -- Called when the trade skill window is hidden

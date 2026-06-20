@@ -1,0 +1,54 @@
+---
+description: Require validation against all three primary recipe-scan triggers before finishing scan-related changes
+alwaysApply: true
+---
+
+# Skillet Scan Trigger Validation
+
+Any change that touches scan lifecycle, cache staleness, scan UI lock/dim, or tradeskill events **must be validated against all three primary scan triggers** before finishing.
+
+See also: [`skillet-testing.mdc`](skillet-testing.mdc), [`skillet-wow-api.mdc`](skillet-wow-api.mdc), [`.docs/SCAN_AND_REFRESH_CHANGES.md`](.docs/SCAN_AND_REFRESH_CHANGES.md).
+
+## The three triggers
+
+| Trigger | Entry path | Key functions |
+|---------|------------|---------------|
+| **Window open** | `TRADE_SKILL_SHOW` | `cache_recipes_if_needed` → `RequestRecipeScan` (`notify=true`) → `BeginScanSession` |
+| **Manual rescan** | Rescan button / `RescanTrade(true)` | `RequestRecipeScan` (`force=true`, `notify=true`) |
+| **New recipe learned** | `CHAT_MSG_SKILL` + `TRADE_SKILL_UPDATE` | `SkilletStitch_AutoRescan` (stale only) + `cache_recipes_if_needed` + `Skillet_resume_scan_after_list_change` |
+
+Shared pipeline: `RequestRecipeScan` → `BeginScanSession` / pending defer → `ProcessScanChunk` → `FinishScanSession` / `CancelScanSession` → `ScanCompleted` → `UpdateScanInteractionState`.
+
+## What must hold for every trigger
+
+1. **Scan only when appropriate** — Open/learn scan when `IsRecipeCacheStale()`; manual rescan when forced; no duplicate scans (`IsScanInProgress` guards in Skillet and Stitch).
+2. **UI during scan** — Title-bar progress only; no panel dim. Recipe list browse/scroll/tooltip stay usable; filter/sort/queue/craft guards still block disruptive actions.
+3. **UI after scan/cancel** — `scan_session` cleared; panels at alpha 1.0; recipe buttons above scroll frame; widgets mouse-enabled; `UpdateQueueWindow` restores queue button state.
+4. **Learn/list change mid-scan** — `SkilletUtil.ResyncScanSessionAfterRecipeListChange` rewinds cursor; driver resumes; selection/queue remapped in `ScanCompleted`.
+5. **No paint-time scan** — `paint_recipe_scroll_list` and bag debounce must not start scans.
+
+## Per-trigger checks
+
+### Window open
+- Stale cache: one notify message, progress in title, list populates once at end.
+- Fresh cache: **no scan**, no list flash.
+- Combat open: pending defer; window stays browsable until regen.
+
+### Manual rescan
+- Forces scan even when cache is fresh.
+- Blocked only while same-profession scan already running.
+- Controls and list fully usable after completion.
+
+### New recipe learned (window open)
+- `TRADE_SKILL_UPDATE` detects staleness; mid-scan path resyncs list and resumes driver.
+- `CHAT_MSG_SKILL` does not double-scan (skips if in progress or fresh).
+- New recipe appears; no stuck dim/lock; queue/selection stay on correct recipe.
+
+## Before finishing
+
+1. Run `lua tests/run.lua` — update [`tests/test_cache.lua`](tests/test_cache.lua) when changing `SkilletUtil` scan helpers.
+2. Manually smoke the three triggers using [`.docs/MANUAL_TEST_CHECKLIST.md`](.docs/MANUAL_TEST_CHECKLIST.md): **#16–17**, **#21**, **#26–28**, plus Rescan button on a fresh cache.
+
+## Files that require this validation
+
+`Skillet.lua`, `SkilletUtil.lua`, `SkilletStitch-1.1.lua`, `SkilletQueue.lua`, `TradeskillInfo.lua`, `UI/MainFrame.lua`, `UI/Sorting.lua`, `UI/RecipeNotes.lua`, `ThirdPartyHooks.lua`.

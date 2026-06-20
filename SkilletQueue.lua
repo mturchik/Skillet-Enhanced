@@ -146,72 +146,79 @@ function Skillet:RemapQueueAfterRescan(tradeskill)
     return changed
 end
 
+local function get_selected_recipe_data(self)
+    if not self.currentTrade or not self.selectedSkill then
+        return nil
+    end
+    return self.stitch:GetItemDataByIndex(self.currentTrade, self.selectedSkill)
+end
+
+local function max_queueable_count(self, skill_index, recipe)
+    local factor = recipe.nummade or 1
+    return math.floor(recipe.numcraftable / factor) - self.stitch:GetNumQueuedItems(skill_index)
+end
+
+local function queue_all_craftable(self, start_processing)
+    if self:BlocksScanActions() then
+        return
+    end
+    local s = get_selected_recipe_data(self)
+    if not s then
+        return
+    end
+    local count = max_queueable_count(self, self.selectedSkill, s)
+    if count > 0 then
+        add_items_to_queue(self.selectedSkill, s, count)
+        if start_processing then
+            self:ProcessQueue()
+        end
+    end
+    self:UpdateNumItemsSlider(0, false)
+end
+
+local function queue_selected_count(self, start_processing)
+    if self:BlocksScanActions() then
+        return
+    end
+    self.numItemsToCraft = SkilletItemCountInputBox:GetNumber()
+    if self.numItemsToCraft <= 0 then
+        return
+    end
+    local s = get_selected_recipe_data(self)
+    if not s then
+        return
+    end
+    add_items_to_queue(self.selectedSkill, s, self.numItemsToCraft)
+    if start_processing then
+        self:ProcessQueue()
+    end
+end
+
 -- Queue the max number of craftable items for the currently selected skill
 function Skillet:QueueAllItems()
-	if self.currentTrade and self.selectedSkill then
-		local s = self.stitch:GetItemDataByIndex(self.currentTrade, self.selectedSkill)
-        if s then
-            local factor = s.nummade or 1
-            local count = math.floor(s.numcraftable/factor) - self.stitch:GetNumQueuedItems(self.selectedSkill)
-            if count > 0 then
-                add_items_to_queue(self.selectedSkill, s, count)
-            end
-			-- queued all that could be created, reset the create count
-			-- back down to 0
-			self:UpdateNumItemsSlider(0, false);
-		end
-	end
+    queue_all_craftable(self, false)
 end
 
 -- Adds the currently selected number of items to the queue
 function Skillet:QueueItems()
-	self.numItemsToCraft = SkilletItemCountInputBox:GetNumber();
-
-	if self.numItemsToCraft > 0 then
-		if self.currentTrade and self.selectedSkill then
-			local s = self.stitch:GetItemDataByIndex(self.currentTrade, self.selectedSkill);
-			if s then
-				add_items_to_queue(self.selectedSkill, s, self.numItemsToCraft)
-			end
-		end
-	end
+    queue_selected_count(self, false)
 end
 
 -- Queue and create the max number of craftable items for the currently selected skill
 function Skillet:CreateAllItems()
-	if self.currentTrade and self.selectedSkill then
-		local s = self.stitch:GetItemDataByIndex(self.currentTrade, self.selectedSkill);
-        if s then
-            local factor = s.nummade or 1
-            local count = math.floor(s.numcraftable/factor) - self.stitch:GetNumQueuedItems(self.selectedSkill)
-            if count > 0 then
-                add_items_to_queue(self.selectedSkill, s, count)
-                self:ProcessQueue()
-            end
-            -- created all that could be created, reset the create count
-            -- back down to 0
-            self:UpdateNumItemsSlider(0, false)
-		end
-	end
+    queue_all_craftable(self, true)
 end
 
 -- Adds the currently selected number of items to the queue and then starts the queue
 function Skillet:CreateItems()
-	self.numItemsToCraft = SkilletItemCountInputBox:GetNumber();
-
-	if self.numItemsToCraft > 0 then
-		if self.currentTrade and self.selectedSkill then
-			local s = self.stitch:GetItemDataByIndex(self.currentTrade, self.selectedSkill);
-			if s then
-				add_items_to_queue(self.selectedSkill, s, self.numItemsToCraft)
-				self:ProcessQueue();
-			end
-		end
-	end
+    queue_selected_count(self, true)
 end
 
 -- Starts Processing any items in the queue
 function Skillet:ProcessQueue()
+    if self:BlocksScanActions() then
+        return
+    end
 	local queue = self.stitch:GetQueueInfo()
 	if not queue then
 		return
@@ -224,12 +231,18 @@ end
 -- Clears the current queue, this will not cancel an
 -- items currently being crafted.
 function Skillet:EmptyQueue()
+    if self:BlocksScanActions() then
+        return
+    end
 	self.stitch:ClearQueue()
     self:SaveQueue(self.db.server.queues, self.currentTrade)
 end
 
 -- Removes an item from the queue
 function Skillet:RemoveQueuedItem(id)
+    if self:BlocksScanActions() then
+        return
+    end
     local queue = self.stitch:GetQueueInfo();
     if not queue then
         -- this should never happen, log an error?

@@ -36,6 +36,24 @@ When adding module-local helpers in `UI/*.lua`:
 
 See `tests/test_lua_scope.lua` for executable examples.
 
+## Frame callback registration (dot vs colon)
+
+Handlers passed to Blizzard frame APIs are invoked with **dot** syntax, so `self` inside a `function Skillet:Handler()` is **not** the addon:
+
+| Registration | `self` at runtime |
+|--------------|-------------------|
+| `FauxScrollFrame_OnVerticalScroll(..., Skillet.Foo_OnScroll)` | Scroll frame |
+| `info.func = Skillet.SortDropdown_OnClick` (UIDropDownMenu) | Menu button / args |
+| XML `Skillet:Handler()` | Skillet (colon call) |
+| `EnableResize(..., Skillet.UpdateTradeSkillWindow)` | Skillet (explicit first arg) |
+| `AceEvent:ScheduleEvent(name, Skillet.Func, delay, Skillet)` | Skillet (packed first arg) |
+
+For dot-registered handlers, define `function Skillet.HandlerName()` and use `Skillet:` / `Skillet.` for addon access — never `self:` for addon methods.
+
+## WotLK frame Enable/Disable
+
+On 3.3.5, `ScrollFrame` and plain `Frame` do **not** have `Enable()` / `Disable()`. Always guard with `if widget.Enable then` or use `set_widget_interaction` in `MainFrame.lua`. See [`skillet-wow-api.mdc`](skillet-wow-api.mdc).
+
 ## Existing UI Constants
 
 Reuse module constants; do not magic-number duplicates:

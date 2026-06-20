@@ -32,13 +32,17 @@ local ControlBackdrop  = {
 	insets = { left = 3, right = 3, top = 3, bottom = 3 }
 }
 
--- Called when the list of skills is scrolled
-function Skillet:NotesList_OnScroll()
+-- Called when the list of skills is scrolled.
+-- Registered as Skillet.NotesList_OnScroll (dot) from FauxScrollFrame XML.
+function Skillet.NotesList_OnScroll()
 	Skillet:UpdateNotesWindow()
 end
 
 -- Shows the recipe notes editor for the current window
 function Skillet:ShowRecipeNotes()
+    if self:BlocksScanActions() then
+        return
+    end
 	local s = self.stitch:GetItemDataByIndex(self.currentTrade, self.selectedSkill);
 	if not s then
 		return

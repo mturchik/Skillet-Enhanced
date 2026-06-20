@@ -170,6 +170,29 @@ local function is_recipe_index_stale(i, cached, live_item_links_at)
     return false
 end
 
+-- Returns the first non-header Blizzard index missing or mismatched cached data, or nil if complete.
+local function find_first_stale_recipe_index(blizz_count, is_header_at, cached, live_item_links_at)
+    if not blizz_count or blizz_count <= 0 then
+        return nil
+    end
+    if not cached then
+        for i = 1, blizz_count, 1 do
+            if not is_header_at[i] then
+                return i
+            end
+        end
+        return nil
+    end
+
+    for i = 1, blizz_count, 1 do
+        if not is_header_at[i] and is_recipe_index_stale(i, cached, live_item_links_at) then
+            return i
+        end
+    end
+
+    return nil
+end
+
 -- Returns true when any non-header Blizzard recipe index lacks cached data
 -- or cached data does not match the live result link at that index.
 -- blizz_count includes header rows; cached is indexed by recipe position only.
@@ -182,28 +205,11 @@ function SkilletUtil.IsRecipeIndexCacheStale(blizz_count, is_header_at, cached, 
         return true
     end
 
-    for i = 1, blizz_count, 1 do
-        if not is_header_at[i] and is_recipe_index_stale(i, cached, live_item_links_at) then
-            return true
-        end
-    end
-
-    return false
+    return find_first_stale_recipe_index(blizz_count, is_header_at, cached, live_item_links_at) ~= nil
 end
 
--- Returns the first non-header Blizzard index missing or mismatched cached data, or nil if complete.
 function SkilletUtil.FindFirstStaleRecipeIndex(blizz_count, is_header_at, cached, live_item_links_at)
-    if not blizz_count or blizz_count <= 0 then
-        return nil
-    end
-
-    for i = 1, blizz_count, 1 do
-        if not is_header_at[i] and is_recipe_index_stale(i, cached, live_item_links_at) then
-            return i
-        end
-    end
-
-    return nil
+    return find_first_stale_recipe_index(blizz_count, is_header_at, cached, live_item_links_at)
 end
 
 -- Counts non-header recipe rows in the live Blizzard tradeskill list.
@@ -222,20 +228,31 @@ function SkilletUtil.CountNonHeaderRecipes(blizz_count, is_header_at)
     return count
 end
 
--- Counts non-header recipe rows that already have cached data.
-function SkilletUtil.CountCachedRecipes(blizz_count, is_header_at, cached)
+-- Counts non-header recipe rows with cached data; require_fresh excludes stale links.
+local function count_cached_recipe_rows(blizz_count, is_header_at, cached, live_item_links_at, require_fresh)
     if not blizz_count or blizz_count <= 0 or not cached then
         return 0
     end
 
     local count = 0
     for i = 1, blizz_count, 1 do
-        if not is_header_at[i] and cached[i] then
+        if not is_header_at[i] and cached[i]
+            and (not require_fresh or not is_recipe_index_stale(i, cached, live_item_links_at)) then
             count = count + 1
         end
     end
 
     return count
+end
+
+-- Counts non-header recipe rows that already have cached data.
+function SkilletUtil.CountCachedRecipes(blizz_count, is_header_at, cached)
+    return count_cached_recipe_rows(blizz_count, is_header_at, cached, nil, false)
+end
+
+-- Counts non-header recipe rows with cached data that matches live result links.
+function SkilletUtil.CountFreshCachedRecipes(blizz_count, is_header_at, cached, live_item_links_at)
+    return count_cached_recipe_rows(blizz_count, is_header_at, cached, live_item_links_at, true)
 end
 
 -- Counts non-header recipe rows from Blizzard index 1 through through_index (inclusive).
@@ -270,25 +287,36 @@ function SkilletUtil.ComputeScanPercent(done, total)
     return pct
 end
 
--- Recomputes recipe_done and recipe_total on an active scan session.
--- Non-forced scans: done = cached recipe count. Forced rescans: done = list rows visited.
+-- Recomputes recipe_done, recipe_done_display, and recipe_total on an active scan session.
+-- Done count uses max(cached recipes, scan position); display never decreases mid-session.
 function SkilletUtil.SyncScanSessionProgress(session, cached, progress_through_index)
     if not session or not session.is_header then
         return
     end
 
     session.recipe_total = SkilletUtil.CountNonHeaderRecipes(session.blizz_count, session.is_header)
-    if session.forced then
-        local through = progress_through_index
-        if through == nil then
-            through = session.next_index - 1
-        end
-        session.recipe_done = SkilletUtil.CountNonHeaderRecipesUpTo(
-            session.blizz_count, session.is_header, through)
-    else
-        session.recipe_done = SkilletUtil.CountCachedRecipes(
-            session.blizz_count, session.is_header, cached)
+
+    local cache_done = SkilletUtil.CountFreshCachedRecipes(
+        session.blizz_count, session.is_header, cached, session.live_links)
+
+    local through = progress_through_index
+    if through == nil then
+        through = session.next_index - 1
     end
+    local position_done = SkilletUtil.CountNonHeaderRecipesUpTo(
+        session.blizz_count, session.is_header, through)
+
+    local candidate = cache_done
+    if position_done > candidate then
+        candidate = position_done
+    end
+    session.recipe_done = candidate
+
+    local display = session.recipe_done_display or 0
+    if candidate > display then
+        display = candidate
+    end
+    session.recipe_done_display = display
 end
 
 -- True when a scan session should show progress in the window title.
@@ -315,6 +343,30 @@ function SkilletUtil.SyncScanSessionBlizzCount(session, blizz_count)
     session.blizz_count = blizz_count
     session.is_header, session.live_links = SkilletUtil.BuildTradeSkillHeaderMaps(blizz_count)
     session.recipe_total = SkilletUtil.CountNonHeaderRecipes(blizz_count, session.is_header)
+end
+
+-- When the live tradeskill list changes mid-scan (e.g. learning a recipe), refresh maps
+-- and rewind next_index to the first stale row before the current cursor.
+function SkilletUtil.ResyncScanSessionAfterRecipeListChange(session, blizz_count, cached)
+    if not session or not blizz_count or blizz_count <= 0 then
+        return false
+    end
+
+    local changed = false
+    if blizz_count ~= session.blizz_count then
+        SkilletUtil.SyncScanSessionBlizzCount(session, blizz_count)
+        changed = true
+    end
+
+    local stale = SkilletUtil.FindFirstStaleRecipeIndex(
+        blizz_count, session.is_header, cached, session.live_links)
+    local cursor = session.next_index or 1
+    if stale and stale < cursor then
+        session.next_index = stale
+        changed = true
+    end
+
+    return changed
 end
 
 -- Human-readable scan progress for tests and fallback display.

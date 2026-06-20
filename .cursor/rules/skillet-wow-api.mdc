@@ -1,0 +1,50 @@
+---
+description: WotLK 3.3.5 WoW frame API guards for Skillet UI code
+globs: UI/**/*.lua,Skillet.lua,SkilletQueue.lua
+alwaysApply: false
+---
+
+# Skillet WotLK Frame API Guards
+
+Target: **WotLK 3.3.5a** only. Do not assume Retail or later-expansion frame methods exist.
+
+## Enable / Disable is not universal
+
+| Widget type | `Enable()` / `Disable()` on 3.3.5 |
+|-------------|-------------------------------------|
+| `Button`, `CheckButton`, `EditBox`, `Slider` | Yes |
+| `ScrollFrame`, plain `Frame` | **No** — method is nil |
+
+Calling `:Enable()` on a `ScrollFrame` crashes: `attempt to call method 'Enable' (a nil value)`.
+
+**Always guard:**
+
+```lua
+if widget and widget.Enable then
+    widget:Enable()
+end
+```
+
+Prefer the shared helper in [`UI/MainFrame.lua`](UI/MainFrame.lua): `set_widget_interaction(widget, enabled)` — it checks `widget.Enable` before `Enable`/`Disable`, always sets `EnableMouse` when available, and skips `Enable`/`Disable` under combat lockdown (mouse input still restored via `EnableMouse`).
+
+Never call `:Enable()` / `:Disable()` directly on `SkilletSkillList`, `SkilletQueueList`, or other scroll frames.
+
+## Interaction toggling during scan
+
+- **No panel dimming** — scan progress is title-bar only. Never `SetAlpha` on `SkilletSkillListParent` / reagent / queue parents (dim looked like a lock and could stick after errors).
+- Recipe buttons must sit **above** `SkilletSkillList` (`raise_recipe_button_above_scroll`) so the scroll frame does not steal clicks; only the count bracket strip was clickable before this fix.
+- Never `Disable()` widgets during scan; combat lockdown can block `:Enable()` recovery.
+- Block filter/sort/queue/craft actions in handler guards while `IsScanInProgress`; recipe list browse/scroll/tooltip remain usable.
+- `UpdateScanInteractionState` always runs `clear_scan_panel_dim()` and `ensure_tradeskill_widgets_enabled()`.
+
+## Frame callback `self` (see also `skillet-ui.mdc`)
+
+Dot-registered handlers (`Skillet.Handler` passed to `FauxScrollFrame_OnVerticalScroll`, `UIDropDownMenu`, etc.) receive a **frame** as the first argument, not the Skillet addon. Use `Skillet:` for addon methods inside those handlers.
+
+## Defensive UI entry points
+
+Functions that touch named globals (`SkilletSkillList`, `SkilletFilterBox`, …) must:
+
+1. Nil-check the global before use.
+2. Return early if the tradeskill window has not been created yet (`if not SkilletSkillListParent then return end`).
+3. Use capability checks (`widget.Enable`, `widget.EnableMouse`) before calling optional methods.

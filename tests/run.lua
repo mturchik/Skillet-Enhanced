@@ -30,5 +30,6 @@ require("test_filter")
 require("test_cache")
 require("test_inventory")
 require("test_lua_scope")
+require("test_callback_self")
 
 os.exit(lu.LuaUnit.run())

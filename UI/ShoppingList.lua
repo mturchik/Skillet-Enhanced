@@ -434,8 +434,9 @@ function Skillet:UpdateShoppingListWindow(use_cached_recipes)
     end
 end
 
--- Called when the list of reagents is scrolled
-function Skillet:ShoppingList_OnScroll()
+-- Called when the list of reagents is scrolled.
+-- Registered as Skillet.ShoppingList_OnScroll (dot) from FauxScrollFrame XML.
+function Skillet.ShoppingList_OnScroll()
     Skillet:UpdateShoppingListWindow(true) -- true == use the cached list of recipes
 end
 
