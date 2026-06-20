@@ -61,6 +61,15 @@ local pre_show_callbacks = {}
 -- List of functions that are called before a button is hidden
 local pre_hide_callbacks = {}
 
+local function get_chat_edit_box()
+    if ChatFrameEditBox then
+        return ChatFrameEditBox
+    end
+    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.editBox then
+        return DEFAULT_CHAT_FRAME.editBox
+    end
+end
+
 function Skillet:internal_AddPreButtonShowCallback(method)
     assert(method and type(method) == "function",
            "Usage: Skillet:AddPreButtonShowCallback(method). method must be a non-nil function")
@@ -71,6 +80,25 @@ function Skillet:internal_AddPreButtonHideCallback(method)
     assert(method and type(method) == "function",
            "Usage: Skillet:AddPreButtonHideCallback(method). method must be a non-nil function")
     table.insert(pre_hide_callbacks, method)
+end
+
+function Skillet:IsChatEditFocused()
+    local editBox = get_chat_edit_box()
+    return (editBox and editBox:IsVisible()) or WIM_EditBoxInFocus ~= nil
+end
+
+function Skillet:InsertChatLink(link)
+    if not link or link == "" then
+        return
+    end
+    if ChatEdit_InsertLink(link) then
+        return
+    end
+    local editBox = get_chat_edit_box()
+    if editBox then
+        editBox:Show()
+        ChatEdit_InsertLink(link)
+    end
 end
 
 -- Figures out how to display the craftable counts for a recipe.
@@ -1390,8 +1418,8 @@ function Skillet:SkillButton_OnClick(button)
 
             -- if it was shift-left clicked *and* there is a chat edit
             -- window open, insert the recipe link.
-            if IsShiftKeyDown() and (ChatFrameEditBox:IsVisible() or WIM_EditBoxInFocus ~= nil) then
-                ChatEdit_InsertLink(self:GetTradeSkillRecipeLink(id));
+            if IsShiftKeyDown() and self:IsChatEditFocused() then
+                self:InsertChatLink(self:GetTradeSkillRecipeLink(id))
             end
         end
 

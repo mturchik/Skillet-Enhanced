@@ -325,7 +325,7 @@ Skillet.options =
             desc = L["CONFIGDESC"],
             func = function()
                 if not (UnitAffectingCombat("player")) then
-                    AceLibrary("Waterfall-1.0"):Open("Skillet")
+                    Skillet:ShowOptions()
                 else
                     DEFAULT_CHAT_FRAME:AddMessage("|cff8888ffSkillet|r: Combat lockdown restriction." ..
                                                   " Leave combat and try again.")
@@ -392,6 +392,20 @@ local function alt_item_lookup(link)
     return Skillet.inventoryCheck:GetItemCount(item)
 end
 
+local function register_skillet_options_window()
+    local waterfall = AceLibrary("Waterfall-1.0")
+    if waterfall:IsRegistered("Skillet") then
+        return
+    end
+    waterfall:Register("Skillet",
+                   "aceOptions", Skillet.options,
+                   "title",      L["Skillet Trade Skills"],
+                   "colorR",     0,
+                   "colorG",     0.7,
+                   "colorB",     0
+                   )
+end
+
 -- Called when the addon is enabled
 function Skillet:OnEnable()
 
@@ -456,13 +470,7 @@ function Skillet:OnEnable()
     self.stitch:EnableDataGathering("Skillet")
     self.stitch:EnableQueue("Skillet")
 
-    AceLibrary("Waterfall-1.0"):Register("Skillet",
-                   "aceOptions", Skillet.options,
-                   "title",      L["Skillet Trade Skills"],
-                   "colorR",     0,
-                   "colorG",     0.7,
-                   "colorB",     0
-                   )
+    register_skillet_options_window()
     AceLibrary("Waterfall-1.0"):Open("Skillet")
 
 end
@@ -1279,7 +1287,8 @@ end
 
 -- Show the options window
 function Skillet:ShowOptions()
-    AceLibrary("Waterfall-1.0"):Open("Skillet");
+    register_skillet_options_window()
+    AceLibrary("Waterfall-1.0"):Open("Skillet")
 end
 
 -- Triggers a rescan of the currently selected tradeskill

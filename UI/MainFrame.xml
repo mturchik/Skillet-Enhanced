@@ -418,11 +418,7 @@
                 </Anchors>
                 <Scripts>
                     <OnClick>
-                        local link=GetTradeSkillListLink();
-                        if (not ChatEdit_InsertLink(link) ) then
-                            ChatFrameEditBox:Show();
-                            ChatEdit_InsertLink(link);
-                        end
+                        Skillet:InsertChatLink(GetTradeSkillListLink());
                     </OnClick>
                     <OnEnter>
                         GameTooltip:SetOwner(self,"ANCHOR_TOPLEFT");
