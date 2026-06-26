@@ -21,6 +21,11 @@ local L = AceLibrary("AceLocale-2.2"):new("Skillet")
 SKILLET_TRADE_SKILL_HEIGHT = 16
 SKILLET_NUM_REAGENT_BUTTONS = 8
 
+-- Raid targeting star (icon 1); dimmed when the recipe is not favorited.
+local FAVORITE_STAR_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_1"
+-- Icon column: 3px inset + 16px control; recipe/category text begins after a 1px gap.
+local SKILLET_LIST_TEXT_LEFT = 20
+
 -- min/max width for the reagent window
 local SKILLET_REAGENT_MIN_WIDTH = 240
 local SKILLET_REAGENT_MAX_WIDTH = 320
@@ -189,8 +194,9 @@ function Skillet:CreateTradeSkillWindow()
     SkilletRecipeNotesFrameLabel:SetText(L["Notes"])
     SkilletShoppingListButton:SetText(L["Shopping List"])
 
-    SkilletHideUncraftableRecipesText:SetText(L["Hide uncraftable"])
-    SkilletHideTrivialRecipesText:SetText(L["Hide trivial"])
+    SkilletShowCraftableRecipesText:SetText(L["Craftable"])
+    SkilletShowRelevantRecipesText:SetText(L["Relevant"])
+    SkilletShowFavoriteRecipesText:SetText(L["Favorite"])
 
     -- Always want these visible.
     SkilletItemCountInputBox:SetText("1");
@@ -398,8 +404,9 @@ local function ensure_tradeskill_widgets_enabled()
     end
 
     set_widget_interaction(SkilletFilterBox, true)
-    set_widget_interaction(SkilletHideUncraftableRecipes, true)
-    set_widget_interaction(SkilletHideTrivialRecipes, true)
+    set_widget_interaction(SkilletShowCraftableRecipes, true)
+    set_widget_interaction(SkilletShowRelevantRecipes, true)
+    set_widget_interaction(SkilletShowFavoriteRecipes, true)
     if SkilletSortDropdown then
         pcall(UIDropDownMenu_EnableDropDown, SkilletSortDropdown)
     end
@@ -505,7 +512,7 @@ is_hidden_skill = function(parent, skill_index, skip_uncraftable)
     end
 
     -- are we hiding anything that can't be created with the mats on this character?
-    if not skip_uncraftable and parent:GetTradeSkillOption(parent.currentTrade, "hideuncraftable") then
+    if not skip_uncraftable and parent:GetTradeSkillOption(parent.currentTrade, "showcraftable") then
         local numwbank
         if craftable_count_cache and craftable_count_cache[skill_index] then
             numwbank = craftable_count_cache[skill_index].numwbank
@@ -520,12 +527,18 @@ is_hidden_skill = function(parent, skill_index, skip_uncraftable)
     -- are we hiding anything that is trivial (has no chance of giving a skill point)
     -- Difficulty changes with skill level but is only stored in the stitch cache during
     -- a full recipe scan, so use live GetTradeSkillInfo (batched in skill_type_cache).
-    if parent:GetTradeSkillOption(parent.currentTrade, "hidetrivial") then
+    if parent:GetTradeSkillOption(parent.currentTrade, "showrelevant") then
         local skillType = skill_type_cache and skill_type_cache[skill_index]
         if not skillType then
             _, skillType = parent:GetTradeSkillInfo(skill_index)
         end
         if skillType == "trivial" then
+            return true
+        end
+    end
+
+    if parent:GetTradeSkillOption(parent.currentTrade, "showfavorites") then
+        if not parent:IsRecipeFavorite(parent.currentTrade, skill_index) then
             return true
         end
     end
@@ -576,7 +589,7 @@ local function collect_snapshot_links(self)
         end
     end
 
-    if self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
+    if self:GetTradeSkillOption(self.currentTrade, "showcraftable") then
         local numTradeSkills = self:GetNumTradeSkills()
         for skillIndex = 1, numTradeSkills, 1 do
             local _, skillType = self:GetTradeSkillInfo(skillIndex)
@@ -594,7 +607,7 @@ end
 
 local function build_craftable_count_cache(self)
     craftable_count_cache = {}
-    if not self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
+    if not self:GetTradeSkillOption(self.currentTrade, "showcraftable") then
         return
     end
 
@@ -616,7 +629,7 @@ end
 
 local function build_skill_type_cache(self)
     skill_type_cache = {}
-    if not self:GetTradeSkillOption(self.currentTrade, "hidetrivial") then
+    if not self:GetTradeSkillOption(self.currentTrade, "showrelevant") then
         return
     end
 
@@ -639,6 +652,88 @@ local function clear_inventory_snapshot(self)
     craftable_count_cache = nil
     skill_type_cache = nil
 end
+
+local function set_favorite_star(button, is_favorite)
+    local star = getglobal(button:GetName() .. "FavoriteStar")
+    if not star then
+        return
+    end
+
+    star:SetTexture(FAVORITE_STAR_TEXTURE)
+    if is_favorite then
+        star:SetVertexColor(1, 0.82, 0)
+        star:SetAlpha(1)
+    else
+        star:SetVertexColor(0.6, 0.6, 0.6)
+        star:SetAlpha(0.35)
+    end
+    star:Show()
+end
+
+local function hide_favorite_star(button)
+    local star = getglobal(button:GetName() .. "FavoriteStar")
+    if star then
+        star:Hide()
+    end
+end
+
+local function show_expand_icon(button, collapsed)
+    local icon = getglobal(button:GetName() .. "ExpandIcon")
+    if not icon then
+        return
+    end
+
+    if collapsed then
+        icon:SetTexture("Interface\\Buttons\\UI-PlusButton-Up")
+    else
+        icon:SetTexture("Interface\\Buttons\\UI-MinusButton-Up")
+    end
+    icon:Show()
+end
+
+local function hide_expand_icon(button)
+    local icon = getglobal(button:GetName() .. "ExpandIcon")
+    if icon then
+        icon:Hide()
+    end
+end
+
+-- Measured width for a FontString after SetText (prevents bracket/count wrapping).
+local function fontstring_text_width(fs, text, min_width, extra)
+    min_width = min_width or 0
+    extra = extra or 4
+    if text then
+        fs:SetText(text)
+    end
+    local w = fs:GetStringWidth()
+    if not w or w < min_width then
+        w = min_width
+    end
+    return w + extra
+end
+
+local function layout_reagent_row(count, count_text)
+    local count_width = fontstring_text_width(count, count_text, 28)
+    count:SetWidth(count_width)
+end
+
+local function layout_recipe_name(button, levelText, buttonText, countText, use_level_column, count_visible)
+    countText:ClearAllPoints()
+    countText:SetPoint("RIGHT", button, "RIGHT", -2, 0)
+
+    buttonText:ClearAllPoints()
+    if use_level_column then
+        buttonText:SetPoint("LEFT", levelText, "RIGHT", 0, 0)
+    else
+        buttonText:SetPoint("LEFT", button, "LEFT", SKILLET_LIST_TEXT_LEFT, 0)
+    end
+    if count_visible then
+        buttonText:SetPoint("RIGHT", countText, "LEFT", -2, 0)
+    else
+        buttonText:SetPoint("RIGHT", button, "RIGHT", -2, 0)
+    end
+end
+
 local function get_recipe_button(i)
     local button = getglobal("SkilletScrollButton"..i)
     if not button then
@@ -646,6 +741,11 @@ local function get_recipe_button(i)
         button:SetParent(SkilletSkillListParent)
         button:SetPoint("TOPLEFT", "SkilletScrollButton"..(i-1), "BOTTOMLEFT")
     end
+    if not button.skillet_clicks_registered then
+        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        button.skillet_clicks_registered = true
+    end
+    button:SetNormalTexture("")
     raise_recipe_button_above_scroll(button)
     return button
 end
@@ -767,16 +867,18 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
                 end
 
                 if collapsed then
-                    button:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+                    show_expand_icon(button, true)
                 else
-                    button:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
+                    show_expand_icon(button, false)
                 end
 
                 buttonText:SetText(skillName)
-                levelText:SetWidth(20)
+                levelText:SetWidth(0)
+                layout_recipe_name(button, levelText, buttonText, countText, false, false)
                 buttonText:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
                 button:SetID(-1)
                 button:UnlockHighlight()
+                hide_favorite_star(button)
 
                 local button_width = button:GetTextWidth()
                 local text = skillName
@@ -788,11 +890,13 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
 
                 show_button(button, self.currentTrade, skillIndex, i)
             else
-                button:SetNormalTexture("")
+                hide_expand_icon(button)
                 getglobal(button:GetName() .. "Highlight"):SetTexture("")
 
                 local s = self.stitch:GetItemDataByIndex(self.currentTrade, skillIndex)
                 local text = ""
+                local use_level_column = false
+                local count_column_width = 0
 
                 if s then
                     text = text .. (self:GetRecipeNamePrefix(self.currentTrade, skillIndex) or "")
@@ -805,11 +909,17 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
                                 levelText:SetTextColor(r, g, b)
                             end
                             levelText:SetText("[" .. level .. "]")
+                            levelText:Show()
+                            levelText:SetWidth(25)
+                            use_level_column = true
+                        else
+                            levelText:SetText("")
+                            levelText:SetWidth(0)
+                            levelText:Hide()
                         end
-                        levelText:Show()
-                        levelText:SetWidth(25)
                     else
-                        levelText:SetWidth(10)
+                        levelText:SetWidth(0)
+                        levelText:Hide()
                     end
 
                     text = text .. s.name
@@ -827,6 +937,8 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
                             count = count .. "]"
                             countText:SetText(count)
                             countText:Show()
+                            count_column_width = fontstring_text_width(countText, nil, 40)
+                            countText:SetWidth(count_column_width)
                         end
                     end
 
@@ -839,13 +951,24 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
                     text = text .. (self:GetRecipeNameSuffix(self.currentTrade, skillIndex) or "")
                 end
 
+                set_favorite_star(button, self:IsRecipeFavorite(self.currentTrade, skillIndex))
+                layout_recipe_name(button, levelText, buttonText, countText, use_level_column, count_column_width > 0)
+
                 buttonText:SetText(text)
 
-                local button_width = button:GetTextWidth()
-                while button_width > max_text_width do
+                local name_max_width = max_text_width - count_column_width
+                if use_level_column then
+                    name_max_width = name_max_width - 25
+                end
+                if name_max_width < 40 then
+                    name_max_width = 40
+                end
+
+                local button_width = buttonText:GetStringWidth()
+                while button_width > name_max_width do
                     text = string.sub(text, 0, -2)
                     buttonText:SetText(text .. "..")
-                    button_width = button:GetTextWidth()
+                    button_width = buttonText:GetStringWidth()
                 end
 
                 if self.selectedSkill and self.selectedSkill == skillIndex then
@@ -867,6 +990,8 @@ local function paint_recipe_scroll_list(self, syncSelection, updateCounts)
                 show_button(button, self.currentTrade, skillIndex, i)
             end
         else
+            hide_expand_icon(button)
+            hide_favorite_star(button)
             hide_button(button, self.currentTrade, 0, i)
             button:UnlockHighlight()
         end
@@ -947,7 +1072,7 @@ function Skillet:internal_RefreshRecipeList(syncSelection)
     skill_type_cache = nil
 end
 
-local function refresh_inventory_and_recipe_list(self, resort_if_hide_uncraftable)
+local function refresh_inventory_and_recipe_list(self, resort_if_showcraftable)
     prepare_inventory_snapshot(self)
 
     local queued_reagents = self:GetReagentsForQueuedRecipes(UnitName("player"))
@@ -955,7 +1080,7 @@ local function refresh_inventory_and_recipe_list(self, resort_if_hide_uncraftabl
     build_craftable_count_cache(self)
     build_skill_type_cache(self)
 
-    if resort_if_hide_uncraftable and self:GetTradeSkillOption(self.currentTrade, "hideuncraftable") then
+    if resort_if_showcraftable and self:GetTradeSkillOption(self.currentTrade, "showcraftable") then
         self:ResortRecipes(true)
     end
 
@@ -1156,6 +1281,9 @@ function Skillet:UpdateDetailsWindow(skill_index)
         SkilletSkillIcon:Hide()
         SkilletReagentLabel:Hide()
         SkilletRecipeNotesButton:Hide()
+        if SkilletRecipeFavoriteButton then
+            SkilletRecipeFavoriteButton:Hide()
+        end
         SkilletPreviousItemButton:Hide()
         SkilletExtraDetailText:Hide()
 
@@ -1193,6 +1321,7 @@ function Skillet:UpdateDetailsWindow(skill_index)
     -- Name of the skill
     SkilletSkillName:SetText(s.name);
     SkilletRecipeNotesButton:Show();
+    self:SyncRecipeFavoriteButton(self.currentTrade, skill_index);
 
     -- Whether or not it is in cooldown.
     local cooldown = GetTradeSkillCooldown(skill_index)
@@ -1251,19 +1380,24 @@ function Skillet:UpdateDetailsWindow(skill_index)
             local num = reagent.num
 
             local count_text = string.format("%d/%d", num, reagent.needed)
+            local name_text
             if ( num < reagent.needed ) then
                 -- grey it out if we don't have it.
+                name_text = GRAY_FONT_COLOR_CODE .. reagent.name .. FONT_COLOR_CODE_CLOSE
+                text:SetText(name_text)
                 count:SetText(GRAY_FONT_COLOR_CODE .. count_text .. FONT_COLOR_CODE_CLOSE)
-                text:SetText(GRAY_FONT_COLOR_CODE .. reagent.name .. FONT_COLOR_CODE_CLOSE)
             else
                 -- ungrey it
+                name_text = reagent.name
+                text:SetText(name_text)
                 count:SetText(count_text)
-                text:SetText(reagent.name)
             end
 
             icon:SetNormalTexture(reagent.texture)
 
-            button:SetWidth(width - 20)
+            local row_width = width - 20
+            button:SetWidth(row_width)
+            layout_reagent_row(count, count_text)
             button:Show()
         else
             -- out of necessary reagents, don't need to show the button,
@@ -1399,8 +1533,16 @@ end
 
 -- When one of the skill buttons in the left scroll pane is clicked
 function Skillet:SkillButton_OnClick(button)
-    if(button=="LeftButton") then
-        local id = this:GetID();
+    local id = this:GetID();
+
+    if button == "RightButton" then
+        if id and id > 0 then
+            self:ToggleRecipeFavorite(self.currentTrade, id)
+        end
+        return
+    end
+
+    if button == "LeftButton" then
         if id == -1 then
             -- header clicked / toggle collapsed state
             local buttonText = getglobal(this:GetName() .. "Name")

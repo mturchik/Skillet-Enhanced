@@ -30,18 +30,11 @@
         <Size>
             <AbsDimension x="293" y="16"/>
         </Size>
-        <!-- Textures for the +/- buttons on headers -->
-        <NormalTexture file="Interface\Buttons\UI-MinusButton-UP">
+        <!-- +/- category expand/collapse (separate from button NormalTexture so recipe rows do not break anchors) -->
+        <NormalTexture>
             <Size>
-                <AbsDimension x="16" y="16"/>
+                <AbsDimension x="0" y="0"/>
             </Size>
-            <Anchors>
-                <Anchor point="LEFT">
-                    <Offset>
-                        <AbsDimension x="3" y="0"/>
-                    </Offset>
-                </Anchor>
-            </Anchors>
         </NormalTexture>
         <HighlightTexture name="$parentHighlight" file="Interface\Buttons\UI-PlusButton-Hilight" alphaMode="ADD">
             <Size>
@@ -55,36 +48,58 @@
                 </Anchor>
             </Anchors>
         </HighlightTexture>
-        <DisabledTexture file="Interface\Buttons\UI-PlusButton-Disabled">
+        <DisabledTexture>
             <Size>
-                <AbsDimension x="16" y="16"/>
+                <AbsDimension x="0" y="0"/>
             </Size>
-            <Anchors>
-                <Anchor point="LEFT">
-                    <Offset>
-                        <AbsDimension x="3" y="0"/>
-                    </Offset>
-                </Anchor>
-            </Anchors>
         </DisabledTexture>
         <!-- 3 pieces of text: required level, name, craftable counts -->
         <Layers>
             <Layer level="OVERLAY">
+                <Texture name="$parentExpandIcon" hidden="true">
+                    <Size>
+                        <AbsDimension x="16" y="16"/>
+                    </Size>
+                    <Anchors>
+                        <Anchor point="LEFT">
+                            <Offset>
+                                <AbsDimension x="3" y="0"/>
+                            </Offset>
+                        </Anchor>
+                    </Anchors>
+                </Texture>
                 <FontString name="$parentLevel" inherits="GameFontNormalSmall" justifyH="LEFT">
                     <Size>
                         <AbsDimension x="25" y="0"/>
                     </Size>
                     <Anchors>
-                        <Anchor point="LEFT"/>
+                        <Anchor point="LEFT">
+                            <Offset>
+                                <AbsDimension x="20" y="0"/>
+                            </Offset>
+                        </Anchor>
                     </Anchors>
                     <Color r="1" g="1" b="1" a="1"/>
                 </FontString>
-                <FontString name="$parentCounts" inherits="GameFontNormalSmall" justifyH="RIGHT">
+                <Texture name="$parentFavoriteStar" hidden="true">
                     <Size>
-                        <AbsDimension x="75" y="0"/>
+                        <AbsDimension x="12" y="12"/>
                     </Size>
                     <Anchors>
-                        <Anchor point="RIGHT"/>
+                        <Anchor point="CENTER" relativePoint="LEFT">
+                            <Offset>
+                                <AbsDimension x="11" y="0"/>
+                            </Offset>
+                        </Anchor>
+                    </Anchors>
+                </Texture>
+                <FontString name="$parentCounts" inherits="GameFontNormalSmall" justifyH="RIGHT">
+                    <Anchors>
+                        <Anchor point="RIGHT">
+                            <Offset>
+                                <AbsDimension x="-2" y="0"/>
+                            </Offset>
+                        </Anchor>
                     </Anchors>
                     <Color r="1" g="1" b="1" a="1"/>
                 </FontString>
@@ -98,6 +113,9 @@
             </Layer>
         </Layers>
         <Scripts>
+            <OnLoad>
+                this:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            </OnLoad>
             <OnClick>
                 Skillet:SkillButton_OnClick(arg1)
             </OnClick>
@@ -214,22 +232,21 @@
         <Layers>
             <Layer level="OVERLAY">
                 <FontString name="$parentText" inherits="GameFontNormal" justifyH="LEFT" justifyV="MIDDLE">
-                    <Size>
-                        <AbsDimension x="160" y="0"/>
-                    </Size>
                     <Anchors>
                         <Anchor point="TOPLEFT" relativeTo="$parent" relativePoint="TOPLEFT">
                             <Offset>
                                 <AbsDimension x="20" y="-1"/>
                             </Offset>
                         </Anchor>
+                        <Anchor point="TOPRIGHT" relativeTo="$parentCount" relativePoint="TOPLEFT">
+                            <Offset>
+                                <AbsDimension x="-4" y="0"/>
+                            </Offset>
+                        </Anchor>
                     </Anchors>
                     <Color r="1" g="1" b="1" a="1"/>
                 </FontString>
                 <FontString name="$parentCount" inherits="GameFontNormal" justifyH="RIGHT" justifyV="MIDDLE">
-                    <Size>
-                        <AbsDimension x="40" y="0"/>
-                    </Size>
                     <Anchors>
                         <Anchor point="TOPRIGHT" relativeTo="$parent" relativePoint="TOPRIGHT">
                             <Offset>
@@ -703,7 +720,7 @@
             # Check boxes for various recipe filtering options.
             #
             -->
-            <CheckButton name="SkilletHideUncraftableRecipes" inherits="SkilletCheckButtonTemplate">
+            <CheckButton name="SkilletShowCraftableRecipes" inherits="SkilletCheckButtonTemplate">
                 <Anchors>
                     <Anchor point="BOTTOMLEFT" relativeTo="SkilletSkillListParent" relativePoint="TOPLEFT">
                         <Offset>
@@ -713,21 +730,35 @@
                 </Anchors>
                 <Scripts>
                     <OnClick>
-                        Skillet:ToggleRecipeFilterOption("hideuncraftable", this)
+                        Skillet:ToggleRecipeFilterOption("showcraftable", this)
                     </OnClick>
                 </Scripts>
             </CheckButton>
-            <CheckButton name="SkilletHideTrivialRecipes" inherits="SkilletCheckButtonTemplate">
+            <CheckButton name="SkilletShowRelevantRecipes" inherits="SkilletCheckButtonTemplate">
                 <Anchors>
                     <Anchor point="BOTTOMLEFT" relativeTo="SkilletSkillListParent" relativePoint="TOPLEFT">
                         <Offset>
-                            <AbsDimension x="160" y="0"/>
+                            <AbsDimension x="95" y="0"/>
                         </Offset>
                     </Anchor>
                 </Anchors>
                 <Scripts>
                     <OnClick>
-                        Skillet:ToggleRecipeFilterOption("hidetrivial", this)
+                        Skillet:ToggleRecipeFilterOption("showrelevant", this)
+                    </OnClick>
+                </Scripts>
+            </CheckButton>
+            <CheckButton name="SkilletShowFavoriteRecipes" inherits="SkilletCheckButtonTemplate">
+                <Anchors>
+                    <Anchor point="BOTTOMLEFT" relativeTo="SkilletSkillListParent" relativePoint="TOPLEFT">
+                        <Offset>
+                            <AbsDimension x="190" y="0"/>
+                        </Offset>
+                    </Anchor>
+                </Anchors>
+                <Scripts>
+                    <OnClick>
+                        Skillet:ToggleRecipeFilterOption("showfavorites", this)
                     </OnClick>
                 </Scripts>
             </CheckButton>
@@ -831,13 +862,15 @@
                 <Layers>
                     <Layer level="OVERLAY">
                         <FontString name="SkilletSkillName" inherits="GameFontNormal" text="Skill Name" justifyH="LEFT">
-                            <Size>
-                                <AbsDimension x="244" y="0"/>
-                            </Size>
                             <Anchors>
                                 <Anchor point="TOPLEFT" relativeTo="SkilletReagentParent" relativePoint="TOPLEFT">
                                     <Offset>
                                         <AbsDimension x="47" y="-10"/>
+                                    </Offset>
+                                </Anchor>
+                                <Anchor point="TOPRIGHT" relativeTo="SkilletReagentParent" relativePoint="TOPRIGHT">
+                                    <Offset>
+                                        <AbsDimension x="-8" y="-10"/>
                                     </Offset>
                                 </Anchor>
                             </Anchors>
@@ -871,12 +904,12 @@
                             <Anchors>
                                 <Anchor point="BOTTOMLEFT" relativeTo="SkilletReagentParent" relativePoint="BOTTOMLEFT" >
                                     <Offset>
-                                        <AbsDimension x="5" y="5"/>
+                                        <AbsDimension x="5" y="32"/>
                                     </Offset>
                                 </Anchor>
                                 <Anchor point="BOTTOMRIGHT" relativeTo="SkilletReagentParent" relativePoint="BOTTOMRIGHT" >
                                     <Offset>
-                                        <AbsDimension x="-25" y="5"/>
+                                        <AbsDimension x="-25" y="32"/>
                                     </Offset>
                                 </Anchor>
                             </Anchors>
@@ -908,14 +941,32 @@
             # A button that pops up the notes for this recipe/list of reagents
             #
             -->
+            <Button name="SkilletRecipeFavoriteButton" inherits="UIPanelButtonTemplate" text="Favorite" parent="SkilletReagentParent">
+                <Size>
+                    <AbsDimension x="80" y="18"/>
+                </Size>
+                <Anchors>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="SkilletReagentParent" relativePoint="BOTTOMRIGHT">
+                        <Offset>
+                            <AbsDimension x="-85" y="8"/>
+                        </Offset>
+                    </Anchor>
+                </Anchors>
+                <Scripts>
+                    <OnClick>
+                        Skillet:ToggleRecipeFavorite();
+                    </OnClick>
+                </Scripts>
+            </Button>
+
             <Button name="SkilletRecipeNotesButton" inherits="UIPanelButtonTemplate" text="Notes" parent="SkilletReagentParent">
                 <Size>
                     <AbsDimension x="75" y="18"/>
                 </Size>
                 <Anchors>
-                    <Anchor point="TOPRIGHT" relativeTo="SkilletReagentParent" relativePoint="TOPRIGHT">
+                    <Anchor point="BOTTOMRIGHT" relativeTo="SkilletReagentParent" relativePoint="BOTTOMRIGHT">
                         <Offset>
-                            <AbsDimension x="-5" y="-5"/>
+                            <AbsDimension x="-5" y="8"/>
                         </Offset>
                     </Anchor>
                 </Anchors>
@@ -936,9 +987,9 @@
                     <AbsDimension x="32" y="32"/>
                 </Size>
                 <Anchors>
-                    <Anchor point="BOTTOMRIGHT" relativeTo="SkilletReagentParent" relativePoint="BOTTOMRIGHT">
+                    <Anchor point="BOTTOMRIGHT" relativeTo="SkilletRecipeFavoriteButton" relativePoint="BOTTOMLEFT">
                         <Offset>
-                            <AbsDimension x="-3" y="3"/>
+                            <AbsDimension x="-6" y="0"/>
                         </Offset>
                     </Anchor>
                 </Anchors>

@@ -88,5 +88,20 @@ function Skillet:UpgradeDataAndOptions()
         self.db.profile.show_crafters_tooltip = true
     end
 
+    -- Renamed hide-* recipe filters to affirmative show-* keys (per profession)
+    local options = self.db.char.tradeskill_options
+    if options then
+        for _, trade_options in pairs(options) do
+            if trade_options.hideuncraftable then
+                trade_options.showcraftable = true
+                trade_options.hideuncraftable = nil
+            end
+            if trade_options.hidetrivial then
+                trade_options.showrelevant = true
+                trade_options.hidetrivial = nil
+            end
+        end
+    end
+
 end
 
