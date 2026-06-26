@@ -71,6 +71,9 @@ Skillet:RegisterDefaults('char', {
     -- options specific to a current tradeskill
     tradeskill_options = {},
 
+    -- recipe favorites keyed by profession name then result item/enchant id
+    favorite_recipes = {},
+
     -- Display alt's items in shopping list
     include_alts = true,
 } )
@@ -1346,7 +1349,7 @@ function Skillet:SetSelectedSkill(skill_index, was_clicked)
     self:UpdateDetailsWindow(skill_index)
 end
 
--- Applies saved filter options to the filter box and hide checkboxes.
+-- Applies saved filter options to the filter box and recipe filter checkboxes.
 -- syncFilterBox: when true, also updates SkilletFilterBox (triggers OnTextChanged).
 function Skillet:SyncTradeSkillFilterWidgets(trade, syncFilterBox)
     trade = trade or self.currentTrade
@@ -1360,15 +1363,18 @@ function Skillet:SyncTradeSkillFilterWidgets(trade, syncFilterBox)
             filterbox:SetText(self:GetTradeSkillOption(trade, "filtertext") or "")
         end
     end
-    if SkilletHideUncraftableRecipes then
-        SkilletHideUncraftableRecipes:SetChecked(self:GetTradeSkillOption(trade, "hideuncraftable"))
+    if SkilletShowCraftableRecipes then
+        SkilletShowCraftableRecipes:SetChecked(self:GetTradeSkillOption(trade, "showcraftable"))
     end
-    if SkilletHideTrivialRecipes then
-        SkilletHideTrivialRecipes:SetChecked(self:GetTradeSkillOption(trade, "hidetrivial"))
+    if SkilletShowRelevantRecipes then
+        SkilletShowRelevantRecipes:SetChecked(self:GetTradeSkillOption(trade, "showrelevant"))
+    end
+    if SkilletShowFavoriteRecipes then
+        SkilletShowFavoriteRecipes:SetChecked(self:GetTradeSkillOption(trade, "showfavorites"))
     end
 end
 
--- Clears saved and on-screen search / hide filters for a profession.
+-- Clears saved and on-screen search / recipe filters for a profession.
 function Skillet:ResetTradeSkillFilters(trade)
     trade = trade or self.currentTrade
     if not trade or trade == "UNKNOWN" then
@@ -1376,14 +1382,15 @@ function Skillet:ResetTradeSkillFilters(trade)
     end
 
     self:SetTradeSkillOption(trade, "filtertext", "")
-    self:SetTradeSkillOption(trade, "hideuncraftable", false)
-    self:SetTradeSkillOption(trade, "hidetrivial", false)
+    self:SetTradeSkillOption(trade, "showcraftable", false)
+    self:SetTradeSkillOption(trade, "showrelevant", false)
+    self:SetTradeSkillOption(trade, "showfavorites", false)
     self:SyncTradeSkillFilterWidgets(trade, true)
 
     FauxScrollFrame_SetOffset(SkilletSkillList, 0)
 end
 
--- Toggles a hide filter checkbox and refreshes the appropriate list tier.
+-- Toggles a recipe filter checkbox and refreshes the appropriate list tier.
 function Skillet:ToggleRecipeFilterOption(option, checkbox)
     if self:BlocksScanActions() then
         return
@@ -1395,7 +1402,7 @@ function Skillet:ToggleRecipeFilterOption(option, checkbox)
     local before = self:GetTradeSkillOption(self.currentTrade, option)
     self:SetTradeSkillOption(self.currentTrade, option, not before)
 
-    if option == "hideuncraftable" then
+    if option == "showcraftable" then
         self:internal_RefreshInventoryCounts()
     else
         self:internal_RefreshRecipeList(true)
@@ -1539,6 +1546,85 @@ function Skillet:AddItemNotesToTooltip(tooltip)
     end
 
     return header_added
+end
+
+-- Returns the stable result id for a recipe at the given Blizzard index, or nil.
+function Skillet:GetRecipeFavoriteId(trade, skill_index)
+    if not trade or not skill_index or skill_index < 1 then
+        return nil
+    end
+
+    local s = self.stitch:GetItemDataByIndex(trade, skill_index)
+    if s and s.link then
+        return self:GetItemIDFromLink(s.link)
+    end
+end
+
+-- True when the recipe is marked as a favorite for this character.
+function Skillet:IsRecipeFavorite(trade, skill_index)
+    trade = trade or self.currentTrade
+    local id = self:GetRecipeFavoriteId(trade, skill_index)
+    if not id then
+        return false
+    end
+
+    return SkilletUtil.IsRecipeIdFavorited(self.db.char.favorite_recipes, trade, id)
+end
+
+-- Toggles favorite state for a recipe and refreshes the recipe list.
+function Skillet:ToggleRecipeFavorite(trade, skill_index)
+    if self:BlocksScanActions() then
+        return
+    end
+
+    trade = trade or self.currentTrade
+    skill_index = skill_index or self.selectedSkill
+    if not trade or not skill_index or skill_index < 1 then
+        return
+    end
+
+    local id = self:GetRecipeFavoriteId(trade, skill_index)
+    if not id then
+        return
+    end
+
+    local favorites = self.db.char.favorite_recipes
+    if not favorites[trade] then
+        favorites[trade] = {}
+    end
+
+    if favorites[trade][id] then
+        favorites[trade][id] = nil
+        if not next(favorites[trade]) then
+            favorites[trade] = nil
+        end
+    else
+        favorites[trade][id] = true
+    end
+
+    self:SyncRecipeFavoriteButton(trade, skill_index)
+    self:internal_RefreshRecipeList(true)
+end
+
+-- Updates the Favorite button label for the selected recipe.
+function Skillet:SyncRecipeFavoriteButton(trade, skill_index)
+    if not SkilletRecipeFavoriteButton then
+        return
+    end
+
+    trade = trade or self.currentTrade
+    skill_index = skill_index or self.selectedSkill
+    if not skill_index or skill_index < 1 then
+        SkilletRecipeFavoriteButton:Hide()
+        return
+    end
+
+    if self:IsRecipeFavorite(trade, skill_index) then
+        SkilletRecipeFavoriteButton:SetText(L["Unfavorite"])
+    else
+        SkilletRecipeFavoriteButton:SetText(L["Favorite"])
+    end
+    SkilletRecipeFavoriteButton:Show()
 end
 
 -- Returns the state of a craft specific option

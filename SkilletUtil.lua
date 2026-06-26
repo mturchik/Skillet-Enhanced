@@ -512,3 +512,16 @@ function SkilletUtil.ComputeCraftableCounts(reagents, nummade, prefer_non_vendor
 
     return num, numwbank, numwalts
 end
+
+function SkilletUtil.IsRecipeIdFavorited(favorites_by_trade, trade, recipe_id)
+    if not favorites_by_trade or not trade or not recipe_id then
+        return false
+    end
+
+    local trade_favorites = favorites_by_trade[trade]
+    if trade_favorites and trade_favorites[recipe_id] then
+        return true
+    end
+
+    return false
+end

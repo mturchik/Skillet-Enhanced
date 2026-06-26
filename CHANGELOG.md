@@ -2,6 +2,28 @@
 
 All notable changes to Skillet-Enhanced are documented in this file.
 
+## Skillet-Enhanced 1.14.2
+
+### Recipe favorites
+
+- **Per-character favorites** — Star recipes on the current character; stored by crafted result item or enchant ID so favorites survive recipe rescans
+- **List star column** — Raid targeting star beside each recipe (gold = favorited, dim gray = not)
+- **Toggle favorite** — Right-click a recipe, or use the Favorite / Unfavorite button in the detail pane
+- **Favorite filter** — Checkbox to show only favorited recipes (combinable with text search and other filters)
+- **Addon API** — `Skillet:IsRecipeFavorite`, `Skillet:ToggleRecipeFavorite`, and `Skillet:GetRecipeFavoriteId` on the global `Skillet` object
+
+### UI and filtering
+
+- **Affirmative filters** — Craftable, Relevant, and Favorite checkboxes replace the old “hide uncraftable” / “hide trivial” controls (same behavior, clearer labels)
+- **Saved filter migration** — Legacy `hideuncraftable` / `hidetrivial` keys convert to `showcraftable` / `showrelevant` on login
+- **Recipe list layout** — Category expand/collapse icons, favorite star column, and craft-count bracket alignment fixes
+
+### Code and tests
+
+- `SkilletUtil.IsRecipeIdFavorited` — shared favorites lookup helper
+- Unit test for favorites lookup (`tests/test_favorites.lua`)
+- `README.md` — installation, usage, persistence, and API documentation for favorites and filters
+
 ## Skillet-Enhanced 1.14.1
 
 ### Recipe scan (Stitch cache)
